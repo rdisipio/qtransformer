@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import tqdm
+import time
 
 import torch
 import torch.nn.functional as F
@@ -12,6 +13,66 @@ from qtransformer import TextClassifier
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def binary_accuracy(preds, y):
+    """
+    Returns accuracy per batch, i.e. if you get 8/10 right, this returns 0.8, NOT 8
+    """
+
+    #round predictions to the closest integer
+    rounded_preds = torch.round(torch.sigmoid(preds))
+    correct = (rounded_preds == y).float() #convert into float for division 
+    acc = correct.sum() / len(correct)
+    return acc
+
+
+def train(model, iterator, optimizer, criterion):
+    epoch_loss = 0
+    epoch_acc = 0
+    
+    model.train()
+    for batch in iterator:
+        optimizer.zero_grad()
+                
+        predictions = model(batch.text).squeeze(1)
+        
+        loss = criterion(predictions, batch.label)
+        acc = binary_accuracy(predictions, batch.label)
+        
+        loss.backward()
+        optimizer.step()
+        
+        epoch_loss += loss.item()
+        epoch_acc += acc.item()
+        
+    return epoch_loss / len(iterator), epoch_acc / len(iterator)
+
+
+def evaluate(model, iterator, criterion):
+    
+    epoch_loss = 0
+    epoch_acc = 0
+    
+    model.eval()
+    with torch.no_grad():
+        for batch in iterator:
+            predictions = model(batch.text).squeeze(1)
+            
+            loss = criterion(predictions, batch.label)
+            acc = binary_accuracy(predictions, batch.label)
+
+            epoch_loss += loss.item()
+            epoch_acc += acc.item()
+        
+    return epoch_loss / len(iterator), epoch_acc / len(iterator)
+
+
+def epoch_time(start_time, end_time):
+    elapsed_time = end_time - start_time
+    elapsed_mins = int(elapsed_time / 60)
+    elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
+    return elapsed_mins, elapsed_secs
 
 
 if __name__ == '__main__':
@@ -48,39 +109,27 @@ if __name__ == '__main__':
                            dropout=DROPOUT_RATE)
     print(f'The model has {count_parameters(model):,} trainable parameters')
 
-    opt = torch.optim.Adam(lr=LR, params=model.parameters())
+    optimizer = torch.optim.Adam(lr=LR, params=model.parameters())
+    criterion = torch.nn.BCEWithLogitsLoss()  # logits -> sigmoid -> loss
 
     # training loop
+    best_valid_loss = float('inf')
     for iepoch in range(NUM_EPOCHS):
+        start_time = time.time()
+
         print(f"Epoch {iepoch}/{NUM_EPOCHS+1}")
-        model.train(True)
 
-        for batch in tqdm.tqdm(train_iter):
-            opt.zero_grad()
-            input = batch.text[0]
-            label = batch.label - 1
+        train_loss, train_acc = train(model, train_iter, optimizer, criterion)
+        valid_loss, valid_acc = evaluate(model, test_iter, criterion)
 
-            if input.size(1) > MAX_SEQ_LEN:
-                input = input[:, :MAX_SEQ_LEN]
-            out = model(input)
-            loss = F.nll_loss(out, label)
+        end_time = time.time()
 
-            loss.backward()
-            opt.step()
+        epoch_mins, epoch_secs = epoch_time(start_time, end_time)
         
-        with torch.no_grad():
-            model.train(False)
-            tot, cor = 0.0, 0.0
-            for batch in test_iter:
-                input = batch.text[0]
-                label = batch.label - 1
-                if input.size(1) > MAX_SEQ_LEN:
-                    input = input[:, :MAX_SEQ_LEN]
-                out = model(input).argmax(dim=1)
-
-                tot += float(input.size(0))
-                cor += float((label == out).sum().item())
-            acc = cor / tot
-            print(f"Accuracy: {acc:.3}")
-    print("End of training.")
-    torch.save(model, "transformer_model.pt")
+        if valid_loss < best_valid_loss:
+            best_valid_loss = valid_loss
+            torch.save(model.state_dict(), 'model.pt')
+        
+        print(f'Epoch: {iepoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
+        print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
+        print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
