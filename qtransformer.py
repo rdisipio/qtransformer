@@ -110,7 +110,7 @@ class TransformerBlock(nn.Module):
         self.norm2 = nn.LayerNorm(embed_dim)
 
     def forward(self, x):
-        attn_output = self.att(x)
+        attn_output = self.attn(x)
         x = self.norm1(attn_output + x)
         x = self.dropout1(x)
 
