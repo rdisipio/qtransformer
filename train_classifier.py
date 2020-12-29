@@ -91,12 +91,12 @@ if __name__ == '__main__':
     BATCH_SIZE = 32
     NUM_EPOCHS = 10
     VOCAB_SIZE = 20000
-    MAX_SEQ_LEN = 128
-    EMBED_DIM = 32
-    NUM_HEADS = 4
+    MAX_SEQ_LEN = 64
+    EMBED_DIM = 8
+    NUM_HEADS = 2
     NUM_TRANSFORMER_BLOCKS = 1
     NUM_CLS = 2
-    FF_DIM = 16
+    FF_DIM = 8
     DROPOUT_RATE = 0.1
     LR = 0.001
 
