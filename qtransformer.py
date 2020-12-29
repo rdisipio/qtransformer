@@ -168,7 +168,10 @@ class TextClassifier(nn.Module):
             TransformerBlock(embed_dim, num_heads, ff_dim) for _ in range(num_blocks)
         ]
         self.transformers = nn.Sequential(*transformer_blocks)
-        self.class_logits = nn.Linear(embed_dim, num_classes)
+        if self.num_classes > 2:
+            self.class_logits = nn.Linear(embed_dim, num_classes)
+        else:
+            self.class_logits = nn.Linear(embed_dim, 1)
         self.dropout = nn.Dropout(dropout)
     
     def forward(self, x):
@@ -178,6 +181,7 @@ class TextClassifier(nn.Module):
         x = self.transformers(x)
         x = x.mean(dim=1)  # global average pooling, works in 1D
         x = self.dropout(x)
-        x = self.class_logits(x)
-        return F.log_softmax(x, dim=1)
-
+        # x = self.class_logits(x)
+        # return F.log_softmax(x, dim=1)
+        return self.class_logits(x)
+        

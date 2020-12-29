@@ -35,13 +35,15 @@ def train(model, iterator, optimizer, criterion):
     for batch in iterator:
         optimizer.zero_grad()
 
-        inputs = batch.text[0]
+        inputs = torch.LongTensor(batch.text[0])
         if inputs.size(1) > MAX_SEQ_LEN:
             inputs = inputs[:, :MAX_SEQ_LEN]
         predictions = model(inputs).squeeze(1)
         
         label = batch.label - 1
+        #label = label.unsqueeze(1)
         loss = criterion(predictions, label)
+        #loss = F.nll_loss(predictions, label)
         acc = binary_accuracy(predictions, label)
         
         loss.backward()
@@ -61,13 +63,15 @@ def evaluate(model, iterator, criterion):
     model.eval()
     with torch.no_grad():
         for batch in iterator:
-            inputs = batch.text[0]
+            inputs = torch.LongTensor(batch.text[0])
             if inputs.size(1) > MAX_SEQ_LEN:
                 inputs = inputs[:, :MAX_SEQ_LEN]
             predictions = model(inputs).squeeze(1)
             
             label = batch.label - 1
+            #label = label.unsqueeze(1)
             loss = criterion(predictions, label)
+            #loss = F.nll_loss(predictions, label)
             acc = binary_accuracy(predictions, label)
 
             epoch_loss += loss.item()
@@ -97,8 +101,8 @@ if __name__ == '__main__':
     LR = 0.001
 
     TEXT = data.Field(lower=True, include_lengths=True, batch_first=True)
-    LABEL = data.Field(sequential=False)
-    #LABEL = data.LabelField(dtype=torch.float)
+    #LABEL = data.Field(sequential=False)
+    LABEL = data.LabelField(dtype=torch.float)
     train_data, test_data = datasets.IMDB.splits(TEXT, LABEL)
 
     TEXT.build_vocab(train_data, max_size=VOCAB_SIZE - 2)  # exclude <UNK> and <PAD>
@@ -118,7 +122,10 @@ if __name__ == '__main__':
     print(f'The model has {count_parameters(model):,} trainable parameters')
 
     optimizer = torch.optim.Adam(lr=LR, params=model.parameters())
-    criterion = torch.nn.BCEWithLogitsLoss()  # logits -> sigmoid -> loss
+    if NUM_CLS < 3:
+        criterion = torch.nn.BCEWithLogitsLoss()  # logits -> sigmoid -> loss
+    else:
+        criterion = torch.nn.CrossEntropyLoss()  # logits -> log_softmax -> NLLloss
 
     # training loop
     best_valid_loss = float('inf')
