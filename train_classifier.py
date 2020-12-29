@@ -6,7 +6,7 @@ import time
 import torch
 import torch.nn.functional as F
 import torchtext
-#from torchtext import data, datasets, vocab
+from torchtext import data, datasets, vocab
 
 from qtransformer import TextClassifier
 
@@ -34,8 +34,9 @@ def train(model, iterator, optimizer, criterion):
     model.train()
     for batch in iterator:
         optimizer.zero_grad()
-                
-        predictions = model(batch.text).squeeze(1)
+
+        inputs = batch.text[0]
+        predictions = model(inputs).squeeze(1)
         
         loss = criterion(predictions, batch.label)
         acc = binary_accuracy(predictions, batch.label)
@@ -57,7 +58,8 @@ def evaluate(model, iterator, criterion):
     model.eval()
     with torch.no_grad():
         for batch in iterator:
-            predictions = model(batch.text).squeeze(1)
+            inputs = batch.text[0]
+            predictions = model(inputs).squeeze(1)
             
             loss = criterion(predictions, batch.label)
             acc = binary_accuracy(predictions, batch.label)
@@ -88,15 +90,15 @@ if __name__ == '__main__':
     DROPOUT_RATE = 0.1
     LR = 0.001
 
-    TEXT = torchtext.data.Field(lower=True, include_lengths=True, batch_first=True)
-    LABEL = torchtext.data.Field(sequential=False)
-    train, test = torchtext.datasets.IMDB.splits(TEXT, LABEL)
+    TEXT = data.Field(lower=True, include_lengths=True, batch_first=True)
+    #LABEL = data.Field(sequential=False)
+    LABEL = data.LabelField(dtype=torch.float)
+    train_data, test_data = datasets.IMDB.splits(TEXT, LABEL)
 
-    TEXT.build_vocab(train, max_size=VOCAB_SIZE - 2)  # exclude <UNK> and <PAD>
-    LABEL.build_vocab(train)
+    TEXT.build_vocab(train_data, max_size=VOCAB_SIZE - 2)  # exclude <UNK> and <PAD>
+    LABEL.build_vocab(train_data)
 
-    train_iter, test_iter = torchtext.data.BucketIterator.splits((train, test), batch_size=BATCH_SIZE)
-
+    train_iter, test_iter = data.BucketIterator.splits((train_data, test_data), batch_size=BATCH_SIZE)
     print(f'Training examples: {len(train_iter)}')
     print(f'Testing examples:  {len(test_iter)}')
 

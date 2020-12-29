@@ -121,16 +121,6 @@ class TransformerBlock(nn.Module):
         return x
 
 
-class TokenEmbedding(nn.Module):
-    def __init__(self, embed_dim, vocab_size):
-        super(TokenEmbedding, self).__init__()
-        self.embed = nn.Embedding(vocab_size, embed_dim)
-        self.embed_dim = embed_dim
-
-    def forward(self, x):
-        return self.embed(x)  # * math.sqrt(self.embed_dim)
-
-
 class PositionalEncoder(nn.Module):
     def __init__(self, embed_dim, max_seq_len=512):
         super().__init__()
@@ -170,7 +160,7 @@ class TextClassifier(nn.Module):
         self.num_classes = num_classes
         self.vocab_size = vocab_size
 
-        self.token_embedding = TokenEmbedding(embed_dim, vocab_size)
+        self.token_embedding = nn.Embedding(vocab_size, embed_dim)
         self.pos_embedding = PositionalEncoder(embed_dim)
 
         transformer_blocks = [
