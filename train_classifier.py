@@ -40,8 +40,9 @@ def train(model, iterator, optimizer, criterion):
             inputs = inputs[:, :MAX_SEQ_LEN]
         predictions = model(inputs).squeeze(1)
         
-        loss = criterion(predictions, batch.label)
-        acc = binary_accuracy(predictions, batch.label)
+        label = batch.label - 1
+        loss = criterion(predictions, label)
+        acc = binary_accuracy(predictions, label)
         
         loss.backward()
         optimizer.step()
@@ -65,8 +66,9 @@ def evaluate(model, iterator, criterion):
                 inputs = inputs[:, :MAX_SEQ_LEN]
             predictions = model(inputs).squeeze(1)
             
-            loss = criterion(predictions, batch.label)
-            acc = binary_accuracy(predictions, batch.label)
+            label = batch.label - 1
+            loss = criterion(predictions, label)
+            acc = binary_accuracy(predictions, label)
 
             epoch_loss += loss.item()
             epoch_acc += acc.item()
