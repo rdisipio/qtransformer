@@ -60,7 +60,7 @@ class MultiHeadAttention(nn.Module):
         return attn, scores
 
     def forward(self, x, mask=None):
-        batch_size, seq_len, embed_dim = q.size()
+        batch_size, seq_len, embed_dim = x.size()
         assert embed_dim == self.embed_dim, f"Input embedding ({embed_dim}) does not match layer embedding size ({self.embed_dim})"
 
         # NB: we're using x as q, k and v, but may be three different tensors

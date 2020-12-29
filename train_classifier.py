@@ -9,6 +9,11 @@ import torchtext
 
 from qtransformer import TextClassifier
 
+
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
 if __name__ == '__main__':
     BATCH_SIZE = 32
     NUM_EPOCHS = 10
@@ -26,7 +31,7 @@ if __name__ == '__main__':
     LABEL = torchtext.data.Field(sequential=False)
     train, test = torchtext.datasets.IMDB.splits(TEXT, LABEL)
 
-    TEXT.build_vocab(train, max_size=VOCAB_SIZE - 2)
+    TEXT.build_vocab(train, max_size=VOCAB_SIZE - 2)  # exclude <UNK> and <PAD>
     LABEL.build_vocab(train)
 
     train_iter, test_iter = torchtext.data.BucketIterator.splits((train, test), batch_size=BATCH_SIZE)
@@ -41,6 +46,8 @@ if __name__ == '__main__':
                            vocab_size=VOCAB_SIZE,
                            ff_dim=FF_DIM,
                            dropout=DROPOUT_RATE)
+    print(f'The model has {count_parameters(model):,} trainable parameters')
+
     opt = torch.optim.Adam(lr=LR, params=model.parameters())
 
     # training loop
