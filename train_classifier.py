@@ -36,6 +36,8 @@ def train(model, iterator, optimizer, criterion):
         optimizer.zero_grad()
 
         inputs = batch.text[0]
+        if inputs.size(1) > MAX_SEQ_LEN:
+            inputs = inputs[:, :MAX_SEQ_LEN]
         predictions = model(inputs).squeeze(1)
         
         loss = criterion(predictions, batch.label)
@@ -59,6 +61,8 @@ def evaluate(model, iterator, criterion):
     with torch.no_grad():
         for batch in iterator:
             inputs = batch.text[0]
+            if inputs.size(1) > MAX_SEQ_LEN:
+                inputs = inputs[:, :MAX_SEQ_LEN]
             predictions = model(inputs).squeeze(1)
             
             loss = criterion(predictions, batch.label)
@@ -91,8 +95,8 @@ if __name__ == '__main__':
     LR = 0.001
 
     TEXT = data.Field(lower=True, include_lengths=True, batch_first=True)
-    #LABEL = data.Field(sequential=False)
-    LABEL = data.LabelField(dtype=torch.float)
+    LABEL = data.Field(sequential=False)
+    #LABEL = data.LabelField(dtype=torch.float)
     train_data, test_data = datasets.IMDB.splits(TEXT, LABEL)
 
     TEXT.build_vocab(train_data, max_size=VOCAB_SIZE - 2)  # exclude <UNK> and <PAD>

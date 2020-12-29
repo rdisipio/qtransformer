@@ -23,6 +23,7 @@ class MultiHeadAttention(nn.Module):
 
         assert embed_dim % num_heads == 0, f"Embedding dimension ({embed_dim}) should be divisible by number of heads ({num_heads})"
 
+        self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.d_k = embed_dim // num_heads  # projection dimensions
         self.k_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
@@ -41,15 +42,15 @@ class MultiHeadAttention(nn.Module):
         '''
         batch_size = x.size(0)
         x = x.view(batch_size, -1, self.num_heads, self.d_k)
-        return x  # .transpose(1, 2)
+        return x.transpose(1, 2)
 
     def attention(self, query, key, value, mask=None, dropout=None):
         '''
         Attention(Q, K, V) = softmax(Q K^T / sqrt(d_k))V
         '''
-        # scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.d_k)
+        scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.d_k)
         # see also: https://tensorchiefs.github.io/dlday2018/tutorial/einsum.html
-        scores = torch.einsum('bijh, bkjh -> bikh', query, key) / math.sqrt(self.d_k)
+        #scores = torch.einsum('bijh, bkjh -> bikh', query, key) / math.sqrt(self.d_k)
         if mask is not None:
             mask = mask.unsqueeze(1)
             scores = scores.masked_fill(mask == 0, -1e9)
