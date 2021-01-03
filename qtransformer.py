@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import pennylane as qml
+
 
 # see also:
 # https://nlp.seas.harvard.edu/2018/04/03/attention.html
@@ -17,11 +19,33 @@ class MultiHeadAttention(nn.Module):
                  embed_dim: int,
                  num_heads: int = 4,
                  dropout: float = 0.1,
+                 n_qubits: int = 0,
+                 n_qlayers: int = 1,
+                 q_device = "default.qubit",
                  mask=None,
                  use_bias=False):
         super(MultiHeadAttention, self).__init__()
 
         assert embed_dim % num_heads == 0, f"Embedding dimension ({embed_dim}) should be divisible by number of heads ({num_heads})"
+
+        self.n_qubits = n_qubits
+        self.n_qlayers = n_qlayers
+        self.q_device = q_device
+        self.dev = qml.device(self.q_device, wires=self.n_qubits)
+
+        def _circuit(inputs, weights):
+            qml.templates.AngleEmbedding(inputs, wires=range(self.n_qubits))
+            qml.templates.BasicEntanglerLayers(weights, wires=range(n_qubits))
+            return [qml.expval(qml.PauliZ(wires=i)) for i in range(n_qubits)]
+        self.qlayer = qml.QNode(_circuit, self.dev, interface="torch")
+        weight_shapes = {"weights": (n_qlayers, n_qubits)}
+        print(f"weight_shapes = (n_qlayers, n_qubits) = ({n_qlayers}, {n_qubits})")
+        self.VQC = {
+            'query': qml.qnn.TorchLayer(self.qlayer, weight_shapes),
+            'key': qml.qnn.TorchLayer(self.qlayer, weight_shapes),
+            'value': qml.qnn.TorchLayer(self.qlayer, weight_shapes),
+            'combine_heads': qml.qnn.TorchLayer(self.qlayer, weight_shapes)
+        }
 
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -37,8 +61,9 @@ class MultiHeadAttention(nn.Module):
         '''
         split into N heads
         from (batch_size, seq_len, embed_dim)
-        to   (batch_size, seq_len, num_heads, projection_dim)
-        then transpose to make mat mult straightforward
+        to   (batch_size, seq_len, num_heads, embed_dim)
+        then transpose (1,2) to (batch_size, num_heads, seq_len, embed_dim)
+        to make mat mult straightforward for each head
         '''
         batch_size = x.size(0)
         x = x.view(batch_size, -1, self.num_heads, self.d_k)
@@ -65,9 +90,14 @@ class MultiHeadAttention(nn.Module):
         assert embed_dim == self.embed_dim, f"Input embedding ({embed_dim}) does not match layer embedding size ({self.embed_dim})"
 
         # NB: we're using x as q, k and v, but may be three different tensors
-        K = self.k_linear(x)
-        Q = self.q_linear(x)
-        V = self.v_linear(x)
+        if self.n_qubits == 0:
+            K = self.k_linear(x)
+            Q = self.q_linear(x)
+            V = self.v_linear(x)
+        else:
+            K = self.VQC['key'](x)
+            Q = self.VQC['query'](x)
+            V = self.VQC['value'](x)
 
         K = self.separate_heads(K)
         Q = self.separate_heads(Q)
@@ -76,7 +106,11 @@ class MultiHeadAttention(nn.Module):
         x, self.attn_weights = self.attention(Q, K, V, mask, dropout=self.dropout)
 
         concat = x.transpose(1, 2).contiguous().view(batch_size, -1, self.embed_dim)
-        output = self.combine_heads(concat)
+
+        if self.n_qubits == 0:
+            output = self.combine_heads(concat)
+        else:
+            output = self.VQC['combine_heads'](concat)
 
         return output
 
