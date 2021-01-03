@@ -21,12 +21,15 @@ class MultiHeadAttention(nn.Module):
                  dropout: float = 0.1,
                  n_qubits: int = 0,
                  n_qlayers: int = 1,
-                 q_device = "default.qubit",
+                 q_device="default.qubit",
                  mask=None,
                  use_bias=False):
         super(MultiHeadAttention, self).__init__()
 
         assert embed_dim % num_heads == 0, f"Embedding dimension ({embed_dim}) should be divisible by number of heads ({num_heads})"
+
+        # todo: add intermediate layer to "dress" quantum circuit
+        assert n_qubits == embed_dim, "Number of qubits ({n_qubits}) does not match embedding dim ({embed_dim})"
 
         self.n_qubits = n_qubits
         self.n_qlayers = n_qlayers
@@ -95,9 +98,20 @@ class MultiHeadAttention(nn.Module):
             Q = self.q_linear(x)
             V = self.v_linear(x)
         else:
-            K = self.VQC['key'](x)
-            Q = self.VQC['query'](x)
-            V = self.VQC['value'](x)
+            K = []
+            Q = []
+            V = []
+            for t in range(seq_len):
+                # get features from the t-th element in seq, for all entries in the batch
+                x_t = x[:, t, :]
+            
+                K_t = self.VQC['key'](x_t)
+                Q_t = self.VQC['query'](x_t)
+                V_t = self.VQC['value'](x_t)
+
+                K.append(K_t)
+                Q.append(Q_t)
+                V.append(V_t)
 
         K = self.separate_heads(K)
         Q = self.separate_heads(Q)
