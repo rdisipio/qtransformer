@@ -134,10 +134,16 @@ class TransformerBlock(nn.Module):
                  embed_dim: int,
                  num_head: int,
                  ff_dim: int,
+                 n_qubits: int = 0,
+                 n_qlayers: int = 1,
                  dropout: float = 0.1,
                  mask=None):
         super(TransformerBlock, self).__init__()
-        self.attn = MultiHeadAttention(embed_dim, num_head, mask=mask)
+        self.attn = MultiHeadAttention(embed_dim,
+                                       num_head,
+                                       n_qubits=n_qubits,
+                                       n_qlayers=n_qlayers,
+                                       mask=mask)
         self.ffn = FeedForward(embed_dim, ff_dim)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
@@ -187,6 +193,8 @@ class TextClassifier(nn.Module):
                  num_classes: int,
                  vocab_size: int,
                  ff_dim: int = 32,
+                 n_qubits: int = 0,
+                 n_qlayers: int = 1,
                  dropout=0.1):
         super(TextClassifier, self).__init__()
         self.embed_dim = embed_dim
@@ -199,7 +207,7 @@ class TextClassifier(nn.Module):
         self.pos_embedding = PositionalEncoder(embed_dim)
 
         transformer_blocks = [
-            TransformerBlock(embed_dim, num_heads, ff_dim) for _ in range(num_blocks)
+            TransformerBlock(embed_dim, num_heads, ff_dim, n_qubits, n_qlayers) for _ in range(num_blocks)
         ]
         self.transformers = nn.Sequential(*transformer_blocks)
         if self.num_classes > 2:
