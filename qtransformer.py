@@ -155,7 +155,7 @@ class FeedForwardQuantum(nn.Module):
     def forward(self, x):
         batch_size, seq_len, _ = x.size()
         x = self.linear_1(x)
-        X = [self.vqc(x[:, t, :] for t in range(seq_len))]
+        X = [self.vqc(x[:, t, :]) for t in range(seq_len)]
         x = torch.Tensor(pad_sequence(X))
         # dropout?
         x = self.linear_2(x)
