@@ -73,8 +73,9 @@ class MultiHeadAttentionBase(nn.Module):
 
         concat = x.transpose(1, 2).contiguous().view(batch_size, -1, self.embed_dim)
 
-        output = self.combine_heads(concat)
-        return output
+        return concat
+        # output = self.combine_heads(concat)
+        # return output
 
     def forward(self, x, mask=None):
         raise NotImplementedError("Base class does not execute forward function.")
@@ -101,7 +102,9 @@ class MultiHeadAttentionClassical(MultiHeadAttentionBase):
         Q = self.q_linear(x)
         V = self.v_linear(x)
 
-        return self.downstream(Q, K, V, batch_size, mask)
+        x = self.downstream(Q, K, V, batch_size, mask)
+        output = self.combine_heads(x)
+        return output
 
 
 class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
@@ -150,7 +153,10 @@ class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
         Q = torch.Tensor(pad_sequence(Q))
         V = torch.Tensor(pad_sequence(V))
 
-        return self.downstream(Q, K, V, batch_size, mask)
+        x = self.downstream(Q, K, V, batch_size, mask)
+        output = [self.combine_heads(x[:, t, :]) for t in range(seq_len)]
+        output = torch.Tensor(pad_sequence(output))
+        return output
 
 
 class FeedForwardBase(nn.Module):

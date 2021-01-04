@@ -106,6 +106,8 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--dropout_rate', default=0.1, type=float)
     args = parser.parse_args()
 
+    MAX_SEQ_LEN = args.max_seq_len
+
     TEXT = data.Field(lower=True, include_lengths=True, batch_first=True)
     #LABEL = data.Field(sequential=False)
     LABEL = data.LabelField(dtype=torch.float)
