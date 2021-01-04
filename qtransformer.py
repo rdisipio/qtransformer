@@ -319,14 +319,13 @@ class TextClassifier(nn.Module):
 
         print(f"++ There will be {num_blocks} transformer blocks")
         if n_qubits > 0:
-            if n_qubits > 0:
-                print(f"++ Transformer will use {n_qubits} qubits and {n_qlayers} q layers")
+            print(f"++ Transformer will use {n_qubits} qubits and {n_qlayers} q layers")
 
             transformer_blocks = [
                 TransformerBlockQuantum(embed_dim, num_heads,
                                         ffn_dim,
                                         n_qubits_transformer=n_qubits,
-                                        n_qubits_ffn=n_qubits//2,
+                                        n_qubits_ffn=n_qubits,
                                         n_qlayers=n_qlayers) for _ in range(num_blocks)
                 ]
         else:

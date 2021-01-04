@@ -142,7 +142,7 @@ if __name__ == '__main__':
     for iepoch in range(args.n_epochs):
         start_time = time.time()
 
-        print(f"Epoch {iepoch}/{args.n_epochs+1}")
+        print(f"Epoch {iepoch+1}/{args.n_epochs}")
 
         train_loss, train_acc = train(model, train_iter, optimizer, criterion)
         valid_loss, valid_acc = evaluate(model, test_iter, criterion)
