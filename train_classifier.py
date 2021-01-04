@@ -92,12 +92,12 @@ if __name__ == '__main__':
     NUM_EPOCHS = 10
     VOCAB_SIZE = 20000
     MAX_SEQ_LEN = 64
-    EMBED_DIM = 8
+    EMBED_DIM = 4
     NUM_HEADS = 2
     NUM_TRANSFORMER_BLOCKS = 1
     NUM_CLS = 2
-    FF_DIM = 8
-    N_QUBITS = 8
+    FF_DIM = 4
+    N_QUBITS = 4
     N_QLAYERS = 1
     DROPOUT_RATE = 0.1
     LR = 0.001
