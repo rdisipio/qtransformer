@@ -144,6 +144,32 @@ class FeedForward(nn.Module):
         return x
 
 
+class FeedForwardQuantum(nn.Module):
+    def __init__(self, embed_dim, n_qubits, n_qlayers=1, dropout=0.1, q_device="default.qubit"):
+        super(FeedForwardQuantum, self).__init__()
+
+        self.n_qubits = n_qubits
+        self.dev = qml.device(q_device, wires=self.n_qubits)
+
+        def _circuit(inputs, weights):
+            qml.templates.AngleEmbedding(inputs, wires=range(self.n_qubits))
+            qml.templates.BasicEntanglerLayers(weights, wires=range(n_qubits))
+            return [qml.expval(qml.PauliZ(wires=i)) for i in range(n_qubits)]
+        self.qlayer = qml.QNode(_circuit, self.dev, interface="torch")
+        weight_shapes = {"weights": (n_qlayers, n_qubits)}
+        self.linear_1 = nn.Linear(embed_dim, n_qubits)
+        self.vqc = qml.qnn.TorchLayer(self.qlayer, weight_shapes)
+        self.linear_2 = nn.Linear(n_qubits, embed_dim)
+        # dropout?
+    
+    def forward(self, x):
+        x = self.linear_1(x)
+        x = self.vqc(x)
+        # dropout?
+        x = self.linear_2(x)
+        return x
+
+
 class TransformerBlock(nn.Module):
     def __init__(self,
                  embed_dim: int,
@@ -159,7 +185,10 @@ class TransformerBlock(nn.Module):
                                        n_qubits=n_qubits,
                                        n_qlayers=n_qlayers,
                                        mask=mask)
-        self.ffn = FeedForward(embed_dim, ff_dim)
+        if self.n_qubits == 0:
+            self.ffn = FeedForward(embed_dim, ff_dim)
+        else:
+            self.ffn = FeedForwardQuantum(embed_dim, n_qubits)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
         self.norm1 = nn.LayerNorm(embed_dim)
