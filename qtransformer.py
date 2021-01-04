@@ -3,6 +3,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.utils.rnn import pad_sequence
 
 import pennylane as qml
 
@@ -43,12 +44,6 @@ class MultiHeadAttention(nn.Module):
         self.qlayer = qml.QNode(_circuit, self.dev, interface="torch")
         weight_shapes = {"weights": (n_qlayers, n_qubits)}
         print(f"weight_shapes = (n_qlayers, n_qubits) = ({n_qlayers}, {n_qubits})")
-        self.VQC = {
-            'query': qml.qnn.TorchLayer(self.qlayer, weight_shapes),
-            'key': qml.qnn.TorchLayer(self.qlayer, weight_shapes),
-            'value': qml.qnn.TorchLayer(self.qlayer, weight_shapes),
-            'combine_heads': qml.qnn.TorchLayer(self.qlayer, weight_shapes)
-        }
 
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -58,6 +53,11 @@ class MultiHeadAttention(nn.Module):
             self.q_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
             self.v_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
             self.combine_heads = nn.Linear(embed_dim, embed_dim, bias=use_bias)
+        else:
+            self.k_linear = qml.qnn.TorchLayer(self.qlayer, weight_shapes)
+            self.q_linear = qml.qnn.TorchLayer(self.qlayer, weight_shapes)
+            self.v_linear = qml.qnn.TorchLayer(self.qlayer, weight_shapes)
+            self.combine_heads = qml.qnn.TorchLayer(self.qlayer, weight_shapes)
         self.dropout = nn.Dropout(dropout)
         self.attn_weights = None
     
@@ -106,16 +106,16 @@ class MultiHeadAttention(nn.Module):
                 # get features from the t-th element in seq, for all entries in the batch
                 x_t = x[:, t, :]
             
-                K_t = self.VQC['key'](x_t)
-                Q_t = self.VQC['query'](x_t)
-                V_t = self.VQC['value'](x_t)
+                K_t = self.k_linear(x_t)
+                Q_t = self.q_linear(x_t)
+                V_t = self.v_linear(x_t)
 
                 K.append(torch.Tensor(K_t))
-                Q.append(torch.TensorQ_t))
-                V.append(torch.TensorV_t))
-            K = torch.Tensor(K)
-            Q = torch.Tensor(Q)
-            V = torch.Tensor(V)
+                Q.append(torch.Tensor(Q_t))
+                V.append(torch.Tensor(V_t))
+            K = torch.Tensor(pad_sequence(K))
+            Q = torch.Tensor(pad_sequence(Q))
+            V = torch.Tensor(pad_sequence(V))
 
         K = self.separate_heads(K)
         Q = self.separate_heads(Q)
@@ -125,10 +125,7 @@ class MultiHeadAttention(nn.Module):
 
         concat = x.transpose(1, 2).contiguous().view(batch_size, -1, self.embed_dim)
 
-        if self.n_qubits == 0:
-            output = self.combine_heads(concat)
-        else:
-            output = self.VQC['combine_heads'](concat)
+        output = self.combine_heads(concat)
 
         return output
 
