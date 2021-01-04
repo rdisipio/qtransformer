@@ -185,10 +185,13 @@ class TransformerBlock(nn.Module):
                                        n_qubits=n_qubits,
                                        n_qlayers=n_qlayers,
                                        mask=mask)
+        self.n_qubits = n_qubits
+        self.n_qlayers = n_qlayers
+
         if self.n_qubits == 0:
             self.ffn = FeedForward(embed_dim, ff_dim)
         else:
-            self.ffn = FeedForwardQuantum(embed_dim, n_qubits)
+            self.ffn = FeedForwardQuantum(embed_dim, n_qubits, n_qlayers)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
         self.norm1 = nn.LayerNorm(embed_dim)
