@@ -18,7 +18,7 @@ import pennylane as qml
 class MultiHeadAttentionBase(nn.Module):
     def __init__(self,
                  embed_dim: int,
-                 num_heads: int = 4,
+                 num_heads: int,
                  dropout: float = 0.1,
                  mask=None,
                  use_bias=False):
@@ -80,14 +80,13 @@ class MultiHeadAttentionBase(nn.Module):
         raise NotImplementedError("Base class does not execute forward function.")
 
 
-def MultiHeadAttentionClassical(MultiHeadAttentionBase):
-    def __init__(self,
-                 embed_dim: int,
-                 num_heads: int = 4,
-                 dropout: float = 0.1,
+class MultiHeadAttentionClassical(MultiHeadAttentionBase):
+    def __init__(self, embed_dim: int,
+                 num_heads: int,
+                 dropout=0.1,
                  mask=None,
                  use_bias=False):
-        super(MultiHeadAttentionClassical, self).__init__(embed_dim, num_heads, dropout, mask)
+        super(MultiHeadAttentionClassical, self).__init__(embed_dim=embed_dim, num_heads=num_heads, dropout=dropout, mask=mask, use_bias=use_bias)
 
         self.k_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
         self.q_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
@@ -105,17 +104,17 @@ def MultiHeadAttentionClassical(MultiHeadAttentionBase):
         return self.downstream(Q, K, V, batch_size, mask)
 
 
-def MultiHeadAttentionQuantum(MultiHeadAttentionBase):
+class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
     def __init__(self,
                  embed_dim: int,
-                 num_heads: int = 4,
-                 dropout: float = 0.1,
+                 num_heads: int,
+                 dropout=0.1,
                  mask=None,
                  use_bias=False,
                  n_qubits: int = 4,
                  n_qlayers: int = 1,
                  q_device="default.qubit"):
-        super(MultiHeadAttentionQuantum, self).__init__(embed_dim, num_heads, dropout, mask)
+        super(MultiHeadAttentionQuantum, self).__init__(embed_dim, num_heads, dropout=dropout, mask=mask, use_bias=use_bias)
         
         # todo: add intermediate layer to "dress" quantum circuit
         assert n_qubits == embed_dim, "Number of qubits ({n_qubits}) does not match embedding dim ({embed_dim})"
@@ -239,7 +238,7 @@ class TransformerBlockClassical(TransformerBlockBase):
                  dropout: float = 0.1,
                  mask=None):
         super(TransformerBlockClassical, self).__init__(embed_dim, num_heads, ff_dim, dropout, mask)
-        self.attn = MultiHeadAttentionClassical(embed_dim, num_heads, mask=mask)
+        self.attn = MultiHeadAttentionClassical(embed_dim=embed_dim, num_heads=num_heads, dropout=dropout, mask=mask)
         self.ffn = FeedForwardClassical(embed_dim, ff_dim)
 
 
@@ -263,6 +262,7 @@ class TransformerBlockQuantum(TransformerBlockBase):
                                               num_heads,
                                               n_qubits=n_qubits_transformer,
                                               n_qlayers=n_qlayers,
+                                              dropout=dropout,
                                               mask=mask)
         self.ffn = FeedForwardQuantum(embed_dim, n_qubits_ffn, n_qlayers)
 
