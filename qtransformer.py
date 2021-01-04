@@ -163,8 +163,13 @@ class FeedForwardQuantum(nn.Module):
         # dropout?
     
     def forward(self, x):
+        batch_size, seq_len, _ = x.size()
         x = self.linear_1(x)
-        x = self.vqc(x)
+        X = []
+        for t in range(seq_len):
+            x_t = x[:, t, :]
+            X.append(self.vqc(x_t))
+        x = torch.Tensor(pad_sequence(X))
         # dropout?
         x = self.linear_2(x)
         return x
@@ -175,23 +180,25 @@ class TransformerBlock(nn.Module):
                  embed_dim: int,
                  num_head: int,
                  ff_dim: int,
-                 n_qubits: int = 0,
+                 n_qubits_transformer: int = 0,
+                 n_qubits_ffn: int = 0,
                  n_qlayers: int = 1,
                  dropout: float = 0.1,
                  mask=None):
         super(TransformerBlock, self).__init__()
         self.attn = MultiHeadAttention(embed_dim,
                                        num_head,
-                                       n_qubits=n_qubits,
+                                       n_qubits=n_qubits_transformer,
                                        n_qlayers=n_qlayers,
                                        mask=mask)
-        self.n_qubits = n_qubits
+        self.n_qubits_transformer = n_qubits_transformer
+        self.n_qubits_ffn = n_qubits_ffn
         self.n_qlayers = n_qlayers
 
-        if self.n_qubits == 0:
+        if self.n_qubits_ffn == 0:
             self.ffn = FeedForward(embed_dim, ff_dim)
         else:
-            self.ffn = FeedForwardQuantum(embed_dim, n_qubits, n_qlayers)
+            self.ffn = FeedForwardQuantum(embed_dim, n_qubits_ffn, n_qlayers)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
         self.norm1 = nn.LayerNorm(embed_dim)
