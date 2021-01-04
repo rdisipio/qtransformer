@@ -30,7 +30,8 @@ class MultiHeadAttention(nn.Module):
         assert embed_dim % num_heads == 0, f"Embedding dimension ({embed_dim}) should be divisible by number of heads ({num_heads})"
 
         # todo: add intermediate layer to "dress" quantum circuit
-        assert n_qubits == embed_dim, "Number of qubits ({n_qubits}) does not match embedding dim ({embed_dim})"
+        if n_qubits > 0:
+            assert n_qubits == embed_dim, "Number of qubits ({n_qubits}) does not match embedding dim ({embed_dim})"
 
         self.n_qubits = n_qubits
         self.n_qlayers = n_qlayers

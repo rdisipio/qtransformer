@@ -97,7 +97,7 @@ if __name__ == '__main__':
     NUM_TRANSFORMER_BLOCKS = 1
     NUM_CLS = 2
     FF_DIM = 4
-    N_QUBITS = 4
+    N_QUBITS = 0
     N_QLAYERS = 1
     DROPOUT_RATE = 0.1
     LR = 0.001
