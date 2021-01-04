@@ -53,10 +53,11 @@ class MultiHeadAttention(nn.Module):
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.d_k = embed_dim // num_heads  # projection dimensions
-        self.k_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
-        self.q_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
-        self.v_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
-        self.combine_heads = nn.Linear(embed_dim, embed_dim, bias=use_bias)
+        if self.n_qubits > 0:
+            self.k_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
+            self.q_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
+            self.v_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
+            self.combine_heads = nn.Linear(embed_dim, embed_dim, bias=use_bias)
         self.dropout = nn.Dropout(dropout)
         self.attn_weights = None
     
@@ -109,9 +110,9 @@ class MultiHeadAttention(nn.Module):
                 Q_t = self.VQC['query'](x_t)
                 V_t = self.VQC['value'](x_t)
 
-                K.append(K_t)
-                Q.append(Q_t)
-                V.append(V_t)
+                K.append(torch.Tensor(K_t))
+                Q.append(torch.TensorQ_t))
+                V.append(torch.TensorV_t))
             K = torch.Tensor(K)
             Q = torch.Tensor(Q)
             V = torch.Tensor(V)
