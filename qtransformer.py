@@ -20,45 +20,19 @@ class MultiHeadAttention(nn.Module):
                  embed_dim: int,
                  num_heads: int = 4,
                  dropout: float = 0.1,
-                 n_qubits: int = 0,
-                 n_qlayers: int = 1,
-                 q_device="default.qubit",
                  mask=None,
                  use_bias=False):
         super(MultiHeadAttention, self).__init__()
 
         assert embed_dim % num_heads == 0, f"Embedding dimension ({embed_dim}) should be divisible by number of heads ({num_heads})"
 
-        # todo: add intermediate layer to "dress" quantum circuit
-        if n_qubits > 0:
-            assert n_qubits == embed_dim, "Number of qubits ({n_qubits}) does not match embedding dim ({embed_dim})"
-
-        self.n_qubits = n_qubits
-        self.n_qlayers = n_qlayers
-        self.q_device = q_device
-        self.dev = qml.device(self.q_device, wires=self.n_qubits)
-
-        def _circuit(inputs, weights):
-            qml.templates.AngleEmbedding(inputs, wires=range(self.n_qubits))
-            qml.templates.BasicEntanglerLayers(weights, wires=range(n_qubits))
-            return [qml.expval(qml.PauliZ(wires=i)) for i in range(n_qubits)]
-        self.qlayer = qml.QNode(_circuit, self.dev, interface="torch")
-        weight_shapes = {"weights": (n_qlayers, n_qubits)}
-        print(f"weight_shapes = (n_qlayers, n_qubits) = ({n_qlayers}, {n_qubits})")
-
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.d_k = embed_dim // num_heads  # projection dimensions
-        if self.n_qubits > 0:
-            self.k_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
-            self.q_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
-            self.v_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
-            self.combine_heads = nn.Linear(embed_dim, embed_dim, bias=use_bias)
-        else:
-            self.k_linear = qml.qnn.TorchLayer(self.qlayer, weight_shapes)
-            self.q_linear = qml.qnn.TorchLayer(self.qlayer, weight_shapes)
-            self.v_linear = qml.qnn.TorchLayer(self.qlayer, weight_shapes)
-            self.combine_heads = qml.qnn.TorchLayer(self.qlayer, weight_shapes)
+        self.k_linear = None
+        self.q_linear = None
+        self.v_linear = None
+        self.combine_heads = None
         self.dropout = nn.Dropout(dropout)
         self.attn_weights = None
     
@@ -89,36 +63,95 @@ class MultiHeadAttention(nn.Module):
             scores = dropout(scores)
         attn = torch.matmul(scores, value)
         return attn, scores
-
-    def forward(self, x, mask=None):
-        batch_size, seq_len, embed_dim = x.size()
-        assert embed_dim == self.embed_dim, f"Input embedding ({embed_dim}) does not match layer embedding size ({self.embed_dim})"
-
-        # NB: we're using x as q, k and v, but may be three different tensors
-        if self.n_qubits == 0:
-            K = self.k_linear(x)
-            Q = self.q_linear(x)
-            V = self.v_linear(x)
-        else:
-            K = [self.k_linear(x[:, t, :]) for t in range(seq_len)]
-            Q = [self.q_linear(x[:, t, :]) for t in range(seq_len)]
-            V = [self.v_linear(x[:, t, :]) for t in range(seq_len)]
-
-            K = torch.Tensor(pad_sequence(K))
-            Q = torch.Tensor(pad_sequence(Q))
-            V = torch.Tensor(pad_sequence(V))
-
-        K = self.separate_heads(K)
-        Q = self.separate_heads(Q)
-        V = self.separate_heads(V)
+    
+    def downstream(self, query, key, value, batch_size, mask=None):
+        Q = self.separate_heads(query)
+        K = self.separate_heads(key)
+        V = self.separate_heads(value)
 
         x, self.attn_weights = self.attention(Q, K, V, mask, dropout=self.dropout)
 
         concat = x.transpose(1, 2).contiguous().view(batch_size, -1, self.embed_dim)
 
         output = self.combine_heads(concat)
-
         return output
+
+    def forward(self, x, mask=None):
+        raise NotImplementedError("Base class does not execute forward function.")
+
+
+def MultiHeadAttentionClassical(MultiHeadAttention):
+    def __init__(self,
+                 embed_dim: int,
+                 num_heads: int = 4,
+                 dropout: float = 0.1,
+                 mask=None,
+                 use_bias=False):
+        super(MultiHeadAttentionClassical, self).__init__(embed_dim, num_heads, dropout, mask)
+
+        self.k_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
+        self.q_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
+        self.v_linear = nn.Linear(embed_dim, embed_dim, bias=use_bias)
+        self.combine_heads = nn.Linear(embed_dim, embed_dim, bias=use_bias)
+    
+    def forward(self, x, mask=None):
+        batch_size, seq_len, embed_dim = x.size()
+        assert embed_dim == self.embed_dim, f"Input embedding ({embed_dim}) does not match layer embedding size ({self.embed_dim})"
+
+        K = self.k_linear(x)
+        Q = self.q_linear(x)
+        V = self.v_linear(x)
+
+        return self.downstream(Q, K, V, batch_size, mask)
+
+
+def MultiHeadAttentionQuantum(MultiHeadAttention):
+    def __init__(self,
+                 embed_dim: int,
+                 num_heads: int = 4,
+                 dropout: float = 0.1,
+                 mask=None,
+                 use_bias=False,
+                 n_qubits: int = 4,
+                 n_qlayers: int = 1,
+                 q_device="default.qubit"):
+        super(MultiHeadAttentionQuantum, self).__init__(embed_dim, num_heads, dropout, mask)
+        
+        # todo: add intermediate layer to "dress" quantum circuit
+        assert n_qubits == embed_dim, "Number of qubits ({n_qubits}) does not match embedding dim ({embed_dim})"
+
+        self.n_qubits = n_qubits
+        self.n_qlayers = n_qlayers
+        self.q_device = q_device
+        self.dev = qml.device(self.q_device, wires=self.n_qubits)
+
+        def _circuit(inputs, weights):
+            qml.templates.AngleEmbedding(inputs, wires=range(self.n_qubits))
+            qml.templates.BasicEntanglerLayers(weights, wires=range(n_qubits))
+            return [qml.expval(qml.PauliZ(wires=i)) for i in range(n_qubits)]
+
+        self.qlayer = qml.QNode(_circuit, self.dev, interface="torch")
+        self.weight_shapes = {"weights": (n_qlayers, n_qubits)}
+        print(f"weight_shapes = (n_qlayers, n_qubits) = ({n_qlayers}, {self.n_qubits})")
+
+        self.k_linear = qml.qnn.TorchLayer(self.qlayer, self.weight_shapes)
+        self.q_linear = qml.qnn.TorchLayer(self.qlayer, self.weight_shapes)
+        self.v_linear = qml.qnn.TorchLayer(self.qlayer, self.weight_shapes)
+        self.combine_heads = qml.qnn.TorchLayer(self.qlayer, self.weight_shapes)
+
+    def forward(self, x, mask=None):
+        batch_size, seq_len, embed_dim = x.size()
+        assert embed_dim == self.embed_dim, f"Input embedding ({embed_dim}) does not match layer embedding size ({self.embed_dim})"
+
+        K = [self.k_linear(x[:, t, :]) for t in range(seq_len)]
+        Q = [self.q_linear(x[:, t, :]) for t in range(seq_len)]
+        V = [self.v_linear(x[:, t, :]) for t in range(seq_len)]
+
+        K = torch.Tensor(pad_sequence(K))
+        Q = torch.Tensor(pad_sequence(Q))
+        V = torch.Tensor(pad_sequence(V))
+
+        return self.downstream(Q, K, V, batch_size, mask)
 
 
 class FeedForward(nn.Module):
@@ -174,19 +207,8 @@ class TransformerBlock(nn.Module):
                  dropout: float = 0.1,
                  mask=None):
         super(TransformerBlock, self).__init__()
-        self.attn = MultiHeadAttention(embed_dim,
-                                       num_head,
-                                       n_qubits=n_qubits_transformer,
-                                       n_qlayers=n_qlayers,
-                                       mask=mask)
-        self.n_qubits_transformer = n_qubits_transformer
-        self.n_qubits_ffn = n_qubits_ffn
-        self.n_qlayers = n_qlayers
-
-        if self.n_qubits_ffn == 0:
-            self.ffn = FeedForward(embed_dim, ff_dim)
-        else:
-            self.ffn = FeedForwardQuantum(embed_dim, n_qubits_ffn, n_qlayers)
+        self.attn = None
+        self.ffn = None
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
         self.norm1 = nn.LayerNorm(embed_dim)
@@ -202,6 +224,42 @@ class TransformerBlock(nn.Module):
         x = self.dropout2(x)
 
         return x
+
+
+class TransformerBlockClassical(TransformerBlock):
+    def __init__(self,
+                 embed_dim: int,
+                 num_heads: int,
+                 ff_dim: int,
+                 dropout: float = 0.1,
+                 mask=None):
+        super(TransformerBlockClassical, self).__init__(embed_dim, num_heads, ff_dim, dropout, mask)
+        self.attn = MultiHeadAttentionClassical(embed_dim, num_heads, mask=mask)
+        self.ffn = FeedForward(embed_dim, ff_dim)
+
+
+class TransformerBlockQuantum(TransformerBlock):
+    def __init__(self,
+                 embed_dim: int,
+                 num_heads: int,
+                 ff_dim: int,
+                 n_qubits_transformer: int = 0,
+                 n_qubits_ffn: int = 0,
+                 n_qlayers: int = 1,
+                 dropout: float = 0.1,
+                 mask=None):
+        super(TransformerBlockQuantum, self).__init__(embed_dim, num_heads, ff_dim, dropout, mask)
+        
+        self.n_qubits_transformer = n_qubits_transformer
+        self.n_qubits_ffn = n_qubits_ffn
+        self.n_qlayers = n_qlayers
+
+        self.attn = MultiHeadAttentionQuantum(embed_dim,
+                                              num_heads,
+                                              n_qubits=n_qubits_transformer,
+                                              n_qlayers=n_qlayers,
+                                              mask=mask)
+        self.ffn = FeedForwardQuantum(embed_dim, n_qubits_ffn, n_qlayers)
 
 
 class PositionalEncoder(nn.Module):
@@ -248,13 +306,23 @@ class TextClassifier(nn.Module):
         self.token_embedding = nn.Embedding(vocab_size, embed_dim)
         self.pos_embedding = PositionalEncoder(embed_dim)
 
-        transformer_blocks = [
-            TransformerBlock(embed_dim, num_heads,
-                             ff_dim,
-                             n_qubits_transformer=n_qubits,
-                             n_qubits_ffn=n_qubits//2,
-                             n_qlayers=n_qlayers) for _ in range(num_blocks)
-        ]
+        print(f"++ There will be {num_blocks} transformer blocks")
+        if n_qubits > 0:
+            if n_qubits > 0:
+                print(f"++ Transformer will use {n_qubits} qubits and {n_qlayers} q layers")
+
+            transformer_blocks = [
+                TransformerBlockQuantum(embed_dim, num_heads,
+                                        ff_dim,
+                                        n_qubits_transformer=n_qubits,
+                                        n_qubits_ffn=n_qubits//2,
+                                        n_qlayers=n_qlayers) for _ in range(num_blocks)
+                ]
+        else:
+            transformer_blocks = [
+                TransformerBlockClassical(embed_dim, num_heads, ff_dim) for _ in range(num_blocks)
+            ]
+
         self.transformers = nn.Sequential(*transformer_blocks)
         if self.num_classes > 2:
             self.class_logits = nn.Linear(embed_dim, num_classes)
@@ -262,9 +330,6 @@ class TextClassifier(nn.Module):
             self.class_logits = nn.Linear(embed_dim, 1)
         self.dropout = nn.Dropout(dropout)
 
-        if n_qubits > 0:
-            print(f"++ Transformer will use {n_qubits} qubits")
-    
     def forward(self, x):
         tokens = self.token_embedding(x)
         # batch_size, seq_len, embed_dim = x.size()
