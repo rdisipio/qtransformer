@@ -262,7 +262,7 @@ class TextClassifier(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
         if n_qubits > 0:
-            print("++ Transformer will use {n_qubits} qubits")
+            print(f"++ Transformer will use {n_qubits} qubits")
     
     def forward(self, x):
         tokens = self.token_embedding(x)
