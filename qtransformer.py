@@ -112,6 +112,9 @@ class MultiHeadAttention(nn.Module):
                 K.append(K_t)
                 Q.append(Q_t)
                 V.append(V_t)
+            K = torch.Tensor(K)
+            Q = torch.Tensor(Q)
+            V = torch.Tensor(V)
 
         K = self.separate_heads(K)
         Q = self.separate_heads(Q)
