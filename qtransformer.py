@@ -248,7 +248,11 @@ class TextClassifier(nn.Module):
         self.pos_embedding = PositionalEncoder(embed_dim)
 
         transformer_blocks = [
-            TransformerBlock(embed_dim, num_heads, ff_dim, n_qubits, n_qlayers) for _ in range(num_blocks)
+            TransformerBlock(embed_dim, num_heads,
+                             ff_dim,
+                             n_qubits_transformer=n_qubits,
+                             n_qubits_ffn=n_qubits//2,
+                             n_qlayers=n_qlayers) for _ in range(num_blocks)
         ]
         self.transformers = nn.Sequential(*transformer_blocks)
         if self.num_classes > 2:
@@ -256,6 +260,9 @@ class TextClassifier(nn.Module):
         else:
             self.class_logits = nn.Linear(embed_dim, 1)
         self.dropout = nn.Dropout(dropout)
+
+        if n_qubits > 0:
+            print("++ Transformer will use {n_qubits} qubits")
     
     def forward(self, x):
         tokens = self.token_embedding(x)
