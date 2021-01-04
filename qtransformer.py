@@ -15,14 +15,14 @@ import pennylane as qml
 # https://towardsdatascience.com/how-to-code-the-transformer-in-pytorch-24db27c8f9ec
 
 
-class MultiHeadAttention(nn.Module):
+class MultiHeadAttentionBase(nn.Module):
     def __init__(self,
                  embed_dim: int,
                  num_heads: int = 4,
                  dropout: float = 0.1,
                  mask=None,
                  use_bias=False):
-        super(MultiHeadAttention, self).__init__()
+        super(MultiHeadAttentionBase, self).__init__()
 
         assert embed_dim % num_heads == 0, f"Embedding dimension ({embed_dim}) should be divisible by number of heads ({num_heads})"
 
@@ -80,7 +80,7 @@ class MultiHeadAttention(nn.Module):
         raise NotImplementedError("Base class does not execute forward function.")
 
 
-def MultiHeadAttentionClassical(MultiHeadAttention):
+def MultiHeadAttentionClassical(MultiHeadAttentionBase):
     def __init__(self,
                  embed_dim: int,
                  num_heads: int = 4,
@@ -105,7 +105,7 @@ def MultiHeadAttentionClassical(MultiHeadAttention):
         return self.downstream(Q, K, V, batch_size, mask)
 
 
-def MultiHeadAttentionQuantum(MultiHeadAttention):
+def MultiHeadAttentionQuantum(MultiHeadAttentionBase):
     def __init__(self,
                  embed_dim: int,
                  num_heads: int = 4,
@@ -154,12 +154,20 @@ def MultiHeadAttentionQuantum(MultiHeadAttention):
         return self.downstream(Q, K, V, batch_size, mask)
 
 
-class FeedForward(nn.Module):
-    def __init__(self, embed_dim, ff_dim, dropout=0.1):
-        super(FeedForward, self).__init__()
-        self.linear_1 = nn.Linear(embed_dim, ff_dim)
-        self.linear_2 = nn.Linear(ff_dim, embed_dim)
+class FeedForwardBase(nn.Module):
+    def __init__(self, embed_dim, ffn_dim, dropout=0.1):
+        super(FeedForwardBase, self).__init__()
+        self.linear_1 = nn.Linear(embed_dim, ffn_dim)
+        self.linear_2 = nn.Linear(ffn_dim, embed_dim)
         self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        raise NotImplementedError("Base class does not implement forward function")
+
+
+class FeedForwardClassical(FeedForwardBase):
+    def __init__(self, embed_dim, ffn_dim, dropout=0.1):
+        super(FeedForwardClassical, self).__init__(embed_dim, ffn_dim, dropout)
 
     def forward(self, x):
         x = F.relu(self.linear_1(x))
@@ -168,9 +176,9 @@ class FeedForward(nn.Module):
         return x
 
 
-class FeedForwardQuantum(nn.Module):
+class FeedForwardQuantum(FeedForwardBase):
     def __init__(self, embed_dim, n_qubits, n_qlayers=1, dropout=0.1, q_device="default.qubit"):
-        super(FeedForwardQuantum, self).__init__()
+        super(FeedForwardQuantum, self).__init__(embed_dim, ffn_dim=n_qubits, dropout=dropout)
 
         self.n_qubits = n_qubits
         self.dev = qml.device(q_device, wires=self.n_qubits)
@@ -180,11 +188,8 @@ class FeedForwardQuantum(nn.Module):
             qml.templates.BasicEntanglerLayers(weights, wires=range(n_qubits))
             return [qml.expval(qml.PauliZ(wires=i)) for i in range(n_qubits)]
         self.qlayer = qml.QNode(_circuit, self.dev, interface="torch")
-        weight_shapes = {"weights": (n_qlayers, n_qubits)}
-        self.linear_1 = nn.Linear(embed_dim, n_qubits)
-        self.vqc = qml.qnn.TorchLayer(self.qlayer, weight_shapes)
-        self.linear_2 = nn.Linear(n_qubits, embed_dim)
-        # dropout?
+        self.weight_shapes = {"weights": (n_qlayers, n_qubits)}
+        self.vqc = qml.qnn.TorchLayer(self.qlayer, self.weight_shapes)
     
     def forward(self, x):
         batch_size, seq_len, _ = x.size()
@@ -196,7 +201,7 @@ class FeedForwardQuantum(nn.Module):
         return x
 
 
-class TransformerBlock(nn.Module):
+class TransformerBlockBase(nn.Module):
     def __init__(self,
                  embed_dim: int,
                  num_head: int,
@@ -206,7 +211,7 @@ class TransformerBlock(nn.Module):
                  n_qlayers: int = 1,
                  dropout: float = 0.1,
                  mask=None):
-        super(TransformerBlock, self).__init__()
+        super(TransformerBlockBase, self).__init__()
         self.attn = None
         self.ffn = None
         self.dropout1 = nn.Dropout(dropout)
@@ -226,7 +231,7 @@ class TransformerBlock(nn.Module):
         return x
 
 
-class TransformerBlockClassical(TransformerBlock):
+class TransformerBlockClassical(TransformerBlockBase):
     def __init__(self,
                  embed_dim: int,
                  num_heads: int,
@@ -235,10 +240,10 @@ class TransformerBlockClassical(TransformerBlock):
                  mask=None):
         super(TransformerBlockClassical, self).__init__(embed_dim, num_heads, ff_dim, dropout, mask)
         self.attn = MultiHeadAttentionClassical(embed_dim, num_heads, mask=mask)
-        self.ffn = FeedForward(embed_dim, ff_dim)
+        self.ffn = FeedForwardClassical(embed_dim, ff_dim)
 
 
-class TransformerBlockQuantum(TransformerBlock):
+class TransformerBlockQuantum(TransformerBlockBase):
     def __init__(self,
                  embed_dim: int,
                  num_heads: int,
