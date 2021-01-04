@@ -106,14 +106,14 @@ if __name__ == '__main__':
     #LABEL = data.Field(sequential=False)
     LABEL = data.LabelField(dtype=torch.float)
     train_data, test_data = datasets.IMDB.splits(TEXT, LABEL)
+    print(f'Training examples: {len(train_data)}')
+    print(f'Testing examples:  {len(test_data)}')
 
     TEXT.build_vocab(train_data, max_size=VOCAB_SIZE - 2)  # exclude <UNK> and <PAD>
     LABEL.build_vocab(train_data)
 
     train_iter, test_iter = data.BucketIterator.splits((train_data, test_data), batch_size=BATCH_SIZE)
-    print(f'Training examples: {len(train_iter)}')
-    print(f'Testing examples:  {len(test_iter)}')
-
+    
     model = TextClassifier(embed_dim=EMBED_DIM,
                            num_heads=NUM_HEADS,
                            num_blocks=NUM_TRANSFORMER_BLOCKS,
