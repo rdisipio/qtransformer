@@ -99,20 +99,10 @@ class MultiHeadAttention(nn.Module):
             Q = self.q_linear(x)
             V = self.v_linear(x)
         else:
-            K = []
-            Q = []
-            V = []
-            for t in range(seq_len):
-                # get features from the t-th element in seq, for all entries in the batch
-                x_t = x[:, t, :]
-            
-                K_t = self.k_linear(x_t)
-                Q_t = self.q_linear(x_t)
-                V_t = self.v_linear(x_t)
+            K = [self.k_linear(x[:, t, :]) for t in range(seq_len)]
+            Q = [self.q_linear(x[:, t, :]) for t in range(seq_len)]
+            V = [self.v_linear(x[:, t, :]) for t in range(seq_len)]
 
-                K.append(torch.Tensor(K_t))
-                Q.append(torch.Tensor(Q_t))
-                V.append(torch.Tensor(V_t))
             K = torch.Tensor(pad_sequence(K))
             Q = torch.Tensor(pad_sequence(Q))
             V = torch.Tensor(pad_sequence(V))
@@ -165,10 +155,7 @@ class FeedForwardQuantum(nn.Module):
     def forward(self, x):
         batch_size, seq_len, _ = x.size()
         x = self.linear_1(x)
-        X = []
-        for t in range(seq_len):
-            x_t = x[:, t, :]
-            X.append(self.vqc(x_t))
+        X = [self.vqc(x[:, t, :] for t in range(seq_len))]
         x = torch.Tensor(pad_sequence(X))
         # dropout?
         x = self.linear_2(x)
