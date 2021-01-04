@@ -297,7 +297,7 @@ class TextClassifier(nn.Module):
                  num_blocks: int,
                  num_classes: int,
                  vocab_size: int,
-                 ff_dim: int = 32,
+                 ffn_dim: int = 32,
                  n_qubits: int = 0,
                  n_qlayers: int = 1,
                  dropout=0.1):
@@ -318,14 +318,14 @@ class TextClassifier(nn.Module):
 
             transformer_blocks = [
                 TransformerBlockQuantum(embed_dim, num_heads,
-                                        ff_dim,
+                                        ffn_dim,
                                         n_qubits_transformer=n_qubits,
                                         n_qubits_ffn=n_qubits//2,
                                         n_qlayers=n_qlayers) for _ in range(num_blocks)
                 ]
         else:
             transformer_blocks = [
-                TransformerBlockClassical(embed_dim, num_heads, ff_dim) for _ in range(num_blocks)
+                TransformerBlockClassical(embed_dim, num_heads, ffn_dim) for _ in range(num_blocks)
             ]
 
         self.transformers = nn.Sequential(*transformer_blocks)
