@@ -252,13 +252,13 @@ class TransformerBlockQuantum(TransformerBlockBase):
     def __init__(self,
                  embed_dim: int,
                  num_heads: int,
-                 ff_dim: int,
+                 ffn_dim: int,
                  n_qubits_transformer: int = 0,
                  n_qubits_ffn: int = 0,
                  n_qlayers: int = 1,
                  dropout: float = 0.1,
                  mask=None):
-        super(TransformerBlockQuantum, self).__init__(embed_dim, num_heads, ff_dim, dropout, mask)
+        super(TransformerBlockQuantum, self).__init__(embed_dim, num_heads, ffn_dim, dropout, mask)
         
         self.n_qubits_transformer = n_qubits_transformer
         self.n_qubits_ffn = n_qubits_ffn
@@ -270,7 +270,10 @@ class TransformerBlockQuantum(TransformerBlockBase):
                                               n_qlayers=n_qlayers,
                                               dropout=dropout,
                                               mask=mask)
-        self.ffn = FeedForwardQuantum(embed_dim, n_qubits_ffn, n_qlayers)
+        if n_qubits_ffn > 0:
+            self.ffn = FeedForwardQuantum(embed_dim, n_qubits_ffn, n_qlayers)
+        else:
+            self.ffn = FeedForwardClassical(embed_dim, ffn_dim)
 
 
 class PositionalEncoder(nn.Module):
@@ -304,7 +307,8 @@ class TextClassifier(nn.Module):
                  num_classes: int,
                  vocab_size: int,
                  ffn_dim: int = 32,
-                 n_qubits: int = 0,
+                 n_qubits_transformer: int = 0,
+                 n_qubits_ffn: int = 0,
                  n_qlayers: int = 1,
                  dropout=0.1):
         super(TextClassifier, self).__init__()
@@ -318,16 +322,20 @@ class TextClassifier(nn.Module):
         self.pos_embedding = PositionalEncoder(embed_dim)
 
         print(f"++ There will be {num_blocks} transformer blocks")
-        if n_qubits > 0:
-            print(f"++ Transformer will use {n_qubits} qubits and {n_qlayers} q layers")
+
+        if n_qubits_transformer > 0:
+            print(f"++ Transformer will use {n_qubits_transformer} qubits and {n_qlayers} q layers")
+            if n_qubits_ffn > 0:
+                print(f"The feed-forward head will use {n_qubits_ffn} qubits")
+            else:
+                print(f"The feed-forward head will be classical")
 
             transformer_blocks = [
-                TransformerBlockQuantum(embed_dim, num_heads,
-                                        ffn_dim,
-                                        n_qubits_transformer=n_qubits,
-                                        n_qubits_ffn=n_qubits,
+                TransformerBlockQuantum(embed_dim, num_heads, ffn_dim,
+                                        n_qubits_transformer=n_qubits_transformer,
+                                        n_qubits_ffn=n_qubits_ffn,
                                         n_qlayers=n_qlayers) for _ in range(num_blocks)
-                ]
+            ]
         else:
             transformer_blocks = [
                 TransformerBlockClassical(embed_dim, num_heads, ffn_dim) for _ in range(num_blocks)

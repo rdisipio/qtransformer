@@ -101,7 +101,8 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--ffn_dim', default=8, type=int)
     parser.add_argument('-t', '--n_transformer_blocks', default=1, type=int)
     parser.add_argument('-H', '--n_heads', default=2, type=int)
-    parser.add_argument('-q', '--n_qubits', default=0, type=int)
+    parser.add_argument('-q', '--n_qubits_transformer', default=0, type=int)
+    parser.add_argument('-Q', '--n_qubits_ffn', default=0, type=int)
     parser.add_argument('-L', '--n_qlayers', default=1, type=int)
     parser.add_argument('-d', '--dropout_rate', default=0.1, type=float)
     args = parser.parse_args()
@@ -126,7 +127,8 @@ if __name__ == '__main__':
                            num_classes=args.n_classes,
                            vocab_size=args.vocab_size,
                            ffn_dim=args.ffn_dim,
-                           n_qubits=args.n_qubits,
+                           n_qubits_transformer=args.n_qubits_transformer,
+                           n_qubits_ffn=args.n_qubits_ffn,
                            n_qlayers=args.n_qlayers,
                            dropout=args.dropout_rate)
     print(f'The model has {count_parameters(model):,} trainable parameters')
