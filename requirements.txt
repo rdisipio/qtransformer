@@ -2,4 +2,5 @@ torch
 torchtext
 pennylane
 matplotlib
+wheel
 qulacs-gpu

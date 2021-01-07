@@ -125,7 +125,12 @@ class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
         self.n_qubits = n_qubits
         self.n_qlayers = n_qlayers
         self.q_device = q_device
-        self.dev = qml.device(self.q_device, wires=self.n_qubits, parallel=True)
+        if 'qulacs' in q_device:
+            self.dev = qml.device(q_device, wires=self.n_qubits, gpu=True)
+        elif 'braket' in q_device:
+            self.dev = qml.device(q_device, wires=self.n_qubits, parallel=True)
+        else:
+            self.dev = qml.device(q_device, wires=self.n_qubits)
 
         def _circuit(inputs, weights):
             qml.templates.AngleEmbedding(inputs, wires=range(self.n_qubits))
@@ -186,7 +191,12 @@ class FeedForwardQuantum(FeedForwardBase):
         super(FeedForwardQuantum, self).__init__(embed_dim, ffn_dim=n_qubits, dropout=dropout)
 
         self.n_qubits = n_qubits
-        self.dev = qml.device(q_device, wires=self.n_qubits, parallel=True)
+        if 'qulacs' in q_device:
+            self.dev = qml.device(q_device, wires=self.n_qubits, gpu=True)
+        elif 'braket' in q_device:
+            self.dev = qml.device(q_device, wires=self.n_qubits, parallel=True)
+        else:
+            self.dev = qml.device(q_device, wires=self.n_qubits)
 
         def _circuit(inputs, weights):
             qml.templates.AngleEmbedding(inputs, wires=range(self.n_qubits))
