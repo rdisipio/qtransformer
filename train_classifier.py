@@ -91,6 +91,7 @@ def epoch_time(start_time, end_time):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('-D', '--q_device', default='local', type=str)
     parser.add_argument('-B', '--batch_size', default=32, type=int)
     parser.add_argument('-E', '--n_epochs', default=5, type=int)
     parser.add_argument('-C', '--n_classes', default=2, type=int)
@@ -130,7 +131,8 @@ if __name__ == '__main__':
                            n_qubits_transformer=args.n_qubits_transformer,
                            n_qubits_ffn=args.n_qubits_ffn,
                            n_qlayers=args.n_qlayers,
-                           dropout=args.dropout_rate)
+                           dropout=args.dropout_rate,
+                           q_device=args.q_device)
     print(f'The model has {count_parameters(model):,} trainable parameters')
 
     optimizer = torch.optim.Adam(lr=args.lr, params=model.parameters())

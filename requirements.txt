@@ -2,3 +2,4 @@ torch
 torchtext
 pennylane
 matplotlib
+amazon-braket-pennylane-plugin

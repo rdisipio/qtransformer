@@ -257,7 +257,8 @@ class TransformerBlockQuantum(TransformerBlockBase):
                  n_qubits_ffn: int = 0,
                  n_qlayers: int = 1,
                  dropout: float = 0.1,
-                 mask=None):
+                 mask=None,
+                 q_device='default.qubit'):
         super(TransformerBlockQuantum, self).__init__(embed_dim, num_heads, ffn_dim, dropout, mask)
         
         self.n_qubits_transformer = n_qubits_transformer
@@ -269,9 +270,10 @@ class TransformerBlockQuantum(TransformerBlockBase):
                                               n_qubits=n_qubits_transformer,
                                               n_qlayers=n_qlayers,
                                               dropout=dropout,
-                                              mask=mask)
+                                              mask=mask,
+                                              q_device=q_device)
         if n_qubits_ffn > 0:
-            self.ffn = FeedForwardQuantum(embed_dim, n_qubits_ffn, n_qlayers)
+            self.ffn = FeedForwardQuantum(embed_dim, n_qubits_ffn, n_qlayers, q_device=q_device)
         else:
             self.ffn = FeedForwardClassical(embed_dim, ffn_dim)
 
@@ -310,7 +312,8 @@ class TextClassifier(nn.Module):
                  n_qubits_transformer: int = 0,
                  n_qubits_ffn: int = 0,
                  n_qlayers: int = 1,
-                 dropout=0.1):
+                 dropout=0.1,
+                 q_device="device.qubit"):
         super(TextClassifier, self).__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -329,12 +332,14 @@ class TextClassifier(nn.Module):
                 print(f"The feed-forward head will use {n_qubits_ffn} qubits")
             else:
                 print(f"The feed-forward head will be classical")
+            print(f"Using quantum device {q_device}")
 
             transformer_blocks = [
                 TransformerBlockQuantum(embed_dim, num_heads, ffn_dim,
                                         n_qubits_transformer=n_qubits_transformer,
                                         n_qubits_ffn=n_qubits_ffn,
-                                        n_qlayers=n_qlayers) for _ in range(num_blocks)
+                                        n_qlayers=n_qlayers, 
+                                        q_device=q_device) for _ in range(num_blocks)
             ]
         else:
             transformer_blocks = [
