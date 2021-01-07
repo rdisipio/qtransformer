@@ -4,3 +4,4 @@ pennylane
 matplotlib
 wheel
 qulacs-gpu
+tqdm
