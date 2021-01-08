@@ -51,7 +51,7 @@ def scaled_dot_product_attention(q, k, v, mask):
     return output, attention_weights
 
 
-class MultiHeadAttention(tf.keras.layers.Layer):
+class MultiHeadAttentionBase(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads):
         super(MultiHeadAttention, self).__init__()
         self.num_heads = num_heads
@@ -61,10 +61,10 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         self.depth = d_model // self.num_heads
 
-        self.wq = tf.keras.layers.Dense(d_model)
-        self.wk = tf.keras.layers.Dense(d_model)
-        self.wv = tf.keras.layers.Dense(d_model)
-        self.dense = tf.keras.layers.Dense(d_model)
+        self.wq = None
+        self.wk = None
+        self.wv = None
+        self.dense = None
 
     def split_heads(self, x, batch_size):
         """Split the last dimension into (num_heads, depth).
@@ -92,6 +92,15 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         return output, attention_weights
 
 
+class MultiHeadAttentionClassical(MultiHeadAttentionBase):
+    def __init__(self, d_model, num_heads):
+        super(MultiHeadAttentionClassical, self).__init__(d_model, num_heads)
+        self.wq = tf.keras.layers.Dense(d_model)
+        self.wk = tf.keras.layers.Dense(d_model)
+        self.wv = tf.keras.layers.Dense(d_model)
+        self.dense = tf.keras.layers.Dense(d_model)
+
+
 def point_wise_feed_forward_network(d_model, dff):
   return tf.keras.Sequential([
       tf.keras.layers.Dense(dff, activation='relu'),  # (batch_size, seq_len, dff)
@@ -99,11 +108,11 @@ def point_wise_feed_forward_network(d_model, dff):
   ])
 
 
-class TransformerBlock(tf.keras.layers.Layer):
+class TransformerBlockBase(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, dropout_rate=0.1):
         super(TransformerBlock, self).__init__()
-        self.mha = MultiHeadAttention(d_model, num_heads)
-        self.ffn = point_wise_feed_forward_network(d_model, dff)
+        self.mha = None
+        self.ffn = None
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -123,7 +132,14 @@ class TransformerBlock(tf.keras.layers.Layer):
         return out2
 
 
-class EncoderLayer(tf.keras.layers.Layer):
+class TransformerBlockClassical(TransformerBlockBase):
+    def __init__(self, d_model, num_heads, dff, dropout_rate=0.1):
+        super(TransformerBlockClassical, self).__init__(d_model, num_heads, dff, dropout_rate)
+        self.mha = MultiHeadAttention(d_model, num_heads)
+        self.ffn = point_wise_feed_forward_network(d_model, dff)
+
+
+class EncoderLayerBase(tf.keras.layers.Layer):
     def __init__(self, 
                 num_layers, 
                 d_model, 
@@ -132,17 +148,14 @@ class EncoderLayer(tf.keras.layers.Layer):
                 vocab_size,
                 maximum_position_encoding, 
                 dropout_rate=0.1):
-        super(EncoderLayer, self).__init__()
+        super(EncoderLayerBase, self).__init__()
 
         self.d_model = d_model
         self.num_layers = num_layers
 
         self.embedding = tf.keras.layers.Embedding(vocab_size, d_model)
         self.pos_encoding = positional_encoding(maximum_position_encoding, self.d_model)
-
-        self.enc_layers = [TransformerBlock(d_model, num_heads, dff, dropout_rate) 
-                        for _ in range(num_layers)]
-
+        self.enc_layers = None
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
 
     def call(self, x, training, mask=None):
@@ -162,6 +175,21 @@ class EncoderLayer(tf.keras.layers.Layer):
         return x  # (batch_size, input_seq_len, d_model)
 
 
+class EncoderLayerClassical(EncoderLayerBase):
+    def __init__(self, 
+                num_layers, 
+                d_model, 
+                num_heads, 
+                dff, 
+                vocab_size,
+                maximum_position_encoding, 
+                dropout_rate=0.1):
+        super(EncoderLayerClassical, self).__init__(num_layers, d_model, num_heads, dff, vocab_size, maximum_position_encoding, dropout_rate)
+        
+        self.enc_layers = [TransformerBlockClassical(d_model, num_heads, dff, dropout_rate) 
+                        for _ in range(num_layers)]
+
+
 class TextClassifierTF(tf.keras.Model):
     def __init__(self, 
                 num_layers, 
@@ -173,7 +201,7 @@ class TextClassifierTF(tf.keras.Model):
                 maximum_position_encoding: int=10000, 
                 dropout_rate=0.1):
         super(TextClassifierTF, self).__init__()
-        self.encoder = EncoderLayer(num_layers, d_model, num_heads, dff, 
+        self.encoder = EncoderLayerClassical(num_layers, d_model, num_heads, dff, 
                             vocab_size, maximum_position_encoding, dropout_rate)
         
         if num_classes < 2:
