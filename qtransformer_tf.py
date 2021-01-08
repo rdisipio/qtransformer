@@ -99,7 +99,7 @@ def point_wise_feed_forward_network(d_model, dff):
   ])
 
 
-def TransformerBlock(tf.keras.layers.Layer):
+class TransformerBlock(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1):
         super(TransformerBlock, self).__init__()
         self.mha = MultiHeadAttention(d_model, num_heads)
