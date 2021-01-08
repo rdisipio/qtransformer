@@ -100,7 +100,7 @@ def point_wise_feed_forward_network(d_model, dff):
 
 
 class TransformerBlock(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, dff, rate=0.1):
+    def __init__(self, d_model, num_heads, dff, dropout_rate=0.1):
         super(TransformerBlock, self).__init__()
         self.mha = MultiHeadAttention(d_model, num_heads)
         self.ffn = point_wise_feed_forward_network(d_model, dff)
@@ -108,78 +108,84 @@ class TransformerBlock(tf.keras.layers.Layer):
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
-        self.dropout1 = tf.keras.layers.Dropout(rate)
-        self.dropout2 = tf.keras.layers.Dropout(rate)
+        self.dropout1 = tf.keras.layers.Dropout(dropout_rate)
+        self.dropout2 = tf.keras.layers.Dropout(dropout_rate)
 
-  def call(self, x, training, mask):
-    attn_output, _ = self.mha(x, x, x, mask)  # (batch_size, input_seq_len, d_model)
-    attn_output = self.dropout1(attn_output, training=training)
-    out1 = self.layernorm1(x + attn_output)  # (batch_size, input_seq_len, d_model)
+    def call(self, x, training, mask):
+        attn_output, _ = self.mha(x, x, x, mask)  # (batch_size, input_seq_len, d_model)
+        attn_output = self.dropout1(attn_output, training=training)
+        out1 = self.layernorm1(x + attn_output)  # (batch_size, input_seq_len, d_model)
 
-    ffn_output = self.ffn(out1)  # (batch_size, input_seq_len, d_model)
-    ffn_output = self.dropout2(ffn_output, training=training)
-    out2 = self.layernorm2(out1 + ffn_output)  # (batch_size, input_seq_len, d_model)
+        ffn_output = self.ffn(out1)  # (batch_size, input_seq_len, d_model)
+        ffn_output = self.dropout2(ffn_output, training=training)
+        out2 = self.layernorm2(out1 + ffn_output)  # (batch_size, input_seq_len, d_model)
 
-    return out2
-
-
-class Encoder(tf.keras.layers.Layer):
-    def __init__(self, num_layers, d_model, num_heads, dff, input_vocab_size,
-               maximum_position_encoding, rate=0.1):
-        super(Encoder, self).__init__()
-
-        self.d_model = d_model
-        self.num_layers = num_layers
-
-        self.embedding = tf.keras.layers.Embedding(input_vocab_size, d_model)
-        self.pos_encoding = positional_encoding(maximum_position_encoding, 
-                                                self.d_model)
-
-        self.enc_layers = [EncoderLayer(d_model, num_heads, dff, rate) 
-                        for _ in range(num_layers)]
-
-        self.dropout = tf.keras.layers.Dropout(rate)
-
-  def call(self, x, training, mask):
-
-    seq_len = tf.shape(x)[1]
-
-    # adding embedding and position encoding.
-    x = self.embedding(x)  # (batch_size, input_seq_len, d_model)
-    x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
-    x += self.pos_encoding[:, :seq_len, :]
-
-    x = self.dropout(x, training=training)
-
-    for i in range(self.num_layers):
-      x = self.enc_layers[i](x, training, mask)
-
-    return x  # (batch_size, input_seq_len, d_model)
+        return out2
 
 
-class TextClassifierTF(tf.keras.layers.Layer):
+class EncoderLayer(tf.keras.layers.Layer):
     def __init__(self, 
                 num_layers, 
                 d_model, 
                 num_heads, 
                 dff, 
-                input_vocab_size, 
+                vocab_size,
+                maximum_position_encoding, 
+                dropout_rate=0.1):
+        super(EncoderLayer, self).__init__()
+
+        self.d_model = d_model
+        self.num_layers = num_layers
+
+        self.embedding = tf.keras.layers.Embedding(vocab_size, d_model)
+        self.pos_encoding = positional_encoding(maximum_position_encoding, self.d_model)
+
+        self.enc_layers = [TransformerBlock(d_model, num_heads, dff, dropout_rate) 
+                        for _ in range(num_layers)]
+
+        self.dropout = tf.keras.layers.Dropout(dropout_rate)
+
+    def call(self, x, training, mask=None):
+
+        seq_len = tf.shape(x)[1]
+
+        # adding embedding and position encoding.
+        x = self.embedding(x)  # (batch_size, input_seq_len, d_model)
+        x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+        x += self.pos_encoding[:, :seq_len, :]
+
+        x = self.dropout(x, training=training)
+
+        for i in range(self.num_layers):
+            x = self.enc_layers[i](x, training, mask)
+
+        return x  # (batch_size, input_seq_len, d_model)
+
+
+class TextClassifierTF(tf.keras.Model):
+    def __init__(self, 
+                num_layers, 
+                d_model, 
+                num_heads, 
+                dff, 
+                vocab_size, 
                 num_classes, 
-                pe_input: int=10000, 
-                rate=0.1):
+                maximum_position_encoding: int=10000, 
+                dropout_rate=0.1):
         super(TextClassifierTF, self).__init__()
-        self.encoder = Encoder(num_layers, d_model, num_heads, dff, 
-                            input_vocab_size, pe_input, rate)
+        self.encoder = EncoderLayer(num_layers, d_model, num_heads, dff, 
+                            vocab_size, maximum_position_encoding, dropout_rate)
         
         if num_classes < 2:
             raise RuntimeError("Number of classes must be at least 2")
         elif num_classes == 2:
-            self.final_layer = tf.keras.layers.Dense(2, activation=tf.keras.activations.sigmoid())
+            self.final_layer = tf.keras.layers.Dense(1, activation=tf.keras.activations.sigmoid)
         else:
-            self.final_layer = tf.keras.layers.Dense(num_classes, activation=tf.keras.activations.softmax())
+            self.final_layer = tf.keras.layers.Dense(num_classes, activation=tf.keras.activations.softmax)
     
-    def call(self, x, training, enc_padding_mask):
-        encoded_output = self.encoder(x, training, enc_padding_mask)  # (batch_size, inp_seq_len, d_model)
-        final_output = self.final_layer(encoded_output)  # (batch_size, tar_seq_len, num_classes)
+    def call(self, x, training):
+        encoded_output = self.encoder(x, training)  # (batch_size, inp_seq_len, d_model)
+        pooled_output = encoded_output[:,0,:]
+        final_output = self.final_layer(pooled_output)  # (batch_size, tar_seq_len, num_classes)
 
-        return final_output, attention_weights
+        return final_output

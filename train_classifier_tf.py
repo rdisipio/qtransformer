@@ -4,6 +4,7 @@ import argparse
 import tqdm
 import time
 
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
 from qtransformer_tf import TextClassifierTF
@@ -27,7 +28,39 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--dropout_rate', default=0.1, type=float)
     args = parser.parse_args()
 
+    model = TextClassifierTF(
+        num_layers=args.n_transformer_blocks,
+        d_model=args.embed_dim,
+        num_heads=args.n_heads,
+        dff=args.ffn_dim,
+        vocab_size=args.vocab_size,
+        num_classes=args.n_classes,
+        maximum_position_encoding=1024,
+        dropout_rate=args.dropout_rate)
+
+    assert args.n_classes >= 2
+
+    if args.n_classes == 2:
+        model.compile(optimizer='adam',
+              loss=tf.keras.losses.BinaryCrossentropy(),
+              metrics=['accuracy'])
+    else:
+        model.compile(optimizer='adam',
+              loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+              metrics=['sparese_categorical_accuracy'])
+    #print(model.summary())
+
     train_data, validation_data, test_data = tfds.load(
         name="imdb_reviews", 
         split=('train[:60%]', 'train[60%:]', 'test'),
         as_supervised=True)
+    
+    history = model.fit(train_data.shuffle(10000).batch(512),
+                    epochs=10,
+                    validation_data=validation_data.batch(512),
+                    verbose=1)
+    
+    results = model.evaluate(test_data.batch(512), verbose=2)
+
+    for name, value in zip(model.metrics_names, results):
+        print("%s: %.3f" % (name, value))
