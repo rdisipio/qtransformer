@@ -161,7 +161,7 @@ class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
         return v, k, q
     
     def apply_combine_heads(self, x):
-        _, seq_len, _ = tf.shape(q)
+        _, seq_len, _ = tf.shape(x)
         return [self.dense(x[:, t, :]) for t in range(seq_len)]
 
 
