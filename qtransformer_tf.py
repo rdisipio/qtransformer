@@ -110,7 +110,7 @@ def point_wise_feed_forward_network(d_model, dff):
 
 class TransformerBlockBase(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, dropout_rate=0.1):
-        super(TransformerBlock, self).__init__()
+        super(TransformerBlockBase, self).__init__()
         self.mha = None
         self.ffn = None
 
