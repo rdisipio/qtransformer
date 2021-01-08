@@ -110,7 +110,7 @@ class MultiHeadAttentionClassical(MultiHeadAttentionBase):
 
 
 class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
-    def __init__(self, d_model, num_heads, n_qubits, q_device='default.qubit'):
+    def __init__(self, d_model, num_heads, n_qubits, n_qlayers=1, q_device='default.qubit'):
         super(MultiHeadAttentionQuantum, self).__init__(d_model, num_heads)
         # todo: add intermediate layer to "dress" quantum circuit
         assert n_qubits == d_model, f"Number of qubits ({n_qubits}) does not match embedding dim ({d_model})"
@@ -145,7 +145,7 @@ def point_wise_feed_forward_network_classical(d_model, dff):
   ])
 
 
-def point_wise_feed_forward_network_quantum(d_model, dff, n_qubits_ffn, q_device='default.qubit'):
+def point_wise_feed_forward_network_quantum(d_model, dff, n_qubits_ffn, n_qlayers=1, q_device='default.qubit'):
     return tf.keras.Sequential([
       tf.keras.layers.Dense(dff, activation='relu'),  # (batch_size, seq_len, dff)
       tf.keras.layers.Dense(d_model)  # (batch_size, seq_len, d_model)
@@ -191,8 +191,8 @@ class TransformerBlockQuantum(TransformerBlockBase):
                  n_qlayers: int = 1,
                  q_device='default.qubit'):
         super(TransformerBlockQuantum, self).__init__(d_model, num_heads, dff, dropout_rate)
-        self.mha = MultiHeadAttentionQuantum(d_model, num_heads, n_qubits_transformer, q_device)
-        self.ffn = point_wise_feed_forward_network_quantum(d_model, dff, n_qubits_ffn, q_device)
+        self.mha = MultiHeadAttentionQuantum(d_model, num_heads, n_qubits_transformer, n_qlayers, q_device)
+        self.ffn = point_wise_feed_forward_network_quantum(d_model, dff, n_qubits_ffn, n_qlayers, q_device)
 
 
 class EncoderLayerBase(tf.keras.layers.Layer):
