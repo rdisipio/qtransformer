@@ -1,0 +1,8 @@
+tensorflow
+tensorflow_datasets
+pennylane
+matplotlib
+wheel
+tqdm
+qulacs
+pennylane-qulacs
