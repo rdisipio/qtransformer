@@ -132,10 +132,10 @@ class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
             return [qml.expval(qml.PauliZ(wires=i)) for i in range(n_qubits)]
         self.qlayer = qml.QNode(_circuit, self.dev, interface="tf")
         
-        self.wq = qml.qnn.KerasLayer(self.qlayer, weight_shapes)
-        self.wk = qml.qnn.KerasLayer(self.qlayer, weight_shapes)
-        self.wv = qml.qnn.KerasLayer(self.qlayer, weight_shapes)
-        self.dense = qml.qnn.KerasLayer(self.qlayer, weight_shapes)
+        self.wq = qml.qnn.KerasLayer(self.qlayer, weight_shapes, output_dim=n_qubits)
+        self.wk = qml.qnn.KerasLayer(self.qlayer, weight_shapes, output_dim=n_qubits)
+        self.wv = qml.qnn.KerasLayer(self.qlayer, weight_shapes, output_dim=n_qubits)
+        self.dense = qml.qnn.KerasLayer(self.qlayer, weight_shapes, output_dim=n_qubits)
 
 
 def point_wise_feed_forward_network_classical(d_model, dff):
