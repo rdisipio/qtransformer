@@ -120,7 +120,7 @@ class MultiHeadAttentionClassical(MultiHeadAttentionBase):
         return v, k, q
     
     def apply_combine_heads(self, x):
-        return self.dense(concat_attention)  # (batch_size, seq_len_q, d_model)
+        return self.dense(x)  # (batch_size, seq_len_q, d_model)
 
 
 class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
