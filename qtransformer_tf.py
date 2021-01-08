@@ -102,11 +102,7 @@ class MultiHeadAttentionBase(tf.keras.layers.Layer):
 
 
 class MultiHeadAttentionClassical(MultiHeadAttentionBase):
-    def __init__(self, 
-                    d_model, num_heads,
-                 n_qubits: int = 4,
-                 n_qlayers: int = 1,
-                 q_device="default.qubit"):
+    def __init__(self, d_model, num_heads):
         super(MultiHeadAttentionClassical, self).__init__(d_model, num_heads)
         self.wq = tf.keras.layers.Dense(d_model)
         self.wk = tf.keras.layers.Dense(d_model)
@@ -124,7 +120,9 @@ class MultiHeadAttentionClassical(MultiHeadAttentionBase):
 
 
 class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
-    def __init__(self, d_model, num_heads, n_qubits, n_qlayers=1, q_device='default.qubit'):
+    def __init__(self, 
+                 d_model, num_heads, 
+                 n_qubits, n_qlayers=1, q_device='default.qubit'):
         super(MultiHeadAttentionQuantum, self).__init__(d_model, num_heads)
         # todo: add intermediate layer to "dress" quantum circuit
         assert n_qubits == d_model, f"Number of qubits ({n_qubits}) does not match embedding dim ({d_model})"
@@ -158,11 +156,12 @@ class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
         k = [self.wk(k[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, d_model)
         v = [self.wv(v[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, d_model)
 
-        return v, k, q
+        return tf.convert_to_tensor(v), tf.convert_to_tensor(k), tf.convert_to_tensor(q)
     
     def apply_combine_heads(self, x):
         _, seq_len, _ = tf.shape(x)
-        return [self.dense(x[:, t, :]) for t in range(seq_len)]
+        combined_output = tf.convert_to_tensor([self.dense(x[:, t, :]) for t in range(seq_len)])
+        return tf.transpose(combined_output, perm=[1,0,2])
 
 
 def point_wise_feed_forward_network_classical(d_model, dff):
