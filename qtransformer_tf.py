@@ -80,6 +80,9 @@ class MultiHeadAttentionBase(tf.keras.layers.Layer):
     def apply_dense_layers(self, v, k, q):
         raise NotImplementedError("Base class does not implement apply_dense_layers() function")
 
+    def apply_combine_heads(self, x):
+        raise NotImplementedError("Base class does not implement apply_combine_heads() function")
+
     def call(self, v, k, q, mask):
         batch_size = tf.shape(q)[0]
 
@@ -94,7 +97,7 @@ class MultiHeadAttentionBase(tf.keras.layers.Layer):
 
         concat_attention = tf.reshape(scaled_attention, (batch_size, -1, self.d_model))  # (batch_size, seq_len_q, d_model)
 
-        output = self.dense(concat_attention)  # (batch_size, seq_len_q, d_model)
+        output = self.apply_combine_heads(concat_attention) # (batch_size, seq_len_q, d_model)
         return output, attention_weights
 
 
@@ -115,6 +118,9 @@ class MultiHeadAttentionClassical(MultiHeadAttentionBase):
         k = self.wk(k)  # (batch_size, seq_len, d_model)
         v = self.wv(v)  # (batch_size, seq_len, d_model)
         return v, k, q
+    
+    def apply_combine_heads(self, x):
+        return self.dense(concat_attention)  # (batch_size, seq_len_q, d_model)
 
 
 class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
@@ -153,6 +159,11 @@ class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
         v = [self.wv(v[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, d_model)
 
         return v, k, q
+    
+    def apply_combine_heads(self, x):
+        _, seq_len, _ = tf.shape(q)
+        return [self.dense(x[:, t, :]) for t in range(seq_len)]
+
 
 def point_wise_feed_forward_network_classical(d_model, dff):
   return tf.keras.Sequential([
