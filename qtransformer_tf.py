@@ -1,9 +1,13 @@
 import tensorflow as tf
 import numpy as np
+import pennylane as qml
 
+import os
 
 # see also: https://www.tensorflow.org/tutorials/text/transformer
 
+
+USE_GPU = bool(os.environ.get('USE_GPU', False))
 
 def get_angles(pos, i, d_model):
   angle_rates = 1 / np.power(10000, (2 * (i//2)) / np.float32(d_model))
@@ -93,7 +97,11 @@ class MultiHeadAttentionBase(tf.keras.layers.Layer):
 
 
 class MultiHeadAttentionClassical(MultiHeadAttentionBase):
-    def __init__(self, d_model, num_heads):
+    def __init__(self, 
+                    d_model, num_heads,
+                 n_qubits: int = 4,
+                 n_qlayers: int = 1,
+                 q_device="default.qubit"):
         super(MultiHeadAttentionClassical, self).__init__(d_model, num_heads)
         self.wq = tf.keras.layers.Dense(d_model)
         self.wk = tf.keras.layers.Dense(d_model)
@@ -101,8 +109,44 @@ class MultiHeadAttentionClassical(MultiHeadAttentionBase):
         self.dense = tf.keras.layers.Dense(d_model)
 
 
-def point_wise_feed_forward_network(d_model, dff):
+class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
+    def __init__(self, d_model, num_heads, n_qubits, q_device='default.qubit'):
+        super(MultiHeadAttentionQuantum, self).__init__(d_model, num_heads)
+        # todo: add intermediate layer to "dress" quantum circuit
+        assert n_qubits == d_model, f"Number of qubits ({n_qubits}) does not match embedding dim ({d_model})"
+        if 'qulacs' in q_device:
+            print(f"Quantum device: Qulacs: {q_device}")
+            self.dev = qml.device(q_device, wires=n_qubits, gpu=USE_GPU)
+        elif 'braket' in q_device:
+            print(f"Quantum device: Amazon Braket: {q_device}")
+            self.dev = qml.device(q_device, wires=n_qubits, parallel=True)
+        else:
+            print(f"Quantum device: {q_device}")
+            self.dev = qml.device(q_device, wires=n_qubits)
+        
+        weight_shapes = {"weights": (n_qlayers, n_qubits)}
+        print(f"weight_shapes = (n_qlayers, n_qubits) = ({n_qlayers}, {n_qubits})")
+        def _circuit(inputs, weights):
+            qml.templates.AngleEmbedding(inputs, wires=range(n_qubits))
+            qml.templates.BasicEntanglerLayers(weights, wires=range(n_qubits))
+            return [qml.expval(qml.PauliZ(wires=i)) for i in range(n_qubits)]
+        self.qlayer = qml.QNode(_circuit, self.dev, interface="tf")
+        
+        self.wq = qml.qnn.KerasLayer(self.qlayer, weight_shapes)
+        self.wk = qml.qnn.KerasLayer(self.qlayer, weight_shapes)
+        self.wv = qml.qnn.KerasLayer(self.qlayer, weight_shapes)
+        self.dense = qml.qnn.KerasLayer(self.qlayer, weight_shapes)
+
+
+def point_wise_feed_forward_network_classical(d_model, dff):
   return tf.keras.Sequential([
+      tf.keras.layers.Dense(dff, activation='relu'),  # (batch_size, seq_len, dff)
+      tf.keras.layers.Dense(d_model)  # (batch_size, seq_len, d_model)
+  ])
+
+
+def point_wise_feed_forward_network_quantum(d_model, dff, n_qubits_ffn, q_device='default.qubit'):
+    return tf.keras.Sequential([
       tf.keras.layers.Dense(dff, activation='relu'),  # (batch_size, seq_len, dff)
       tf.keras.layers.Dense(d_model)  # (batch_size, seq_len, d_model)
   ])
@@ -136,7 +180,19 @@ class TransformerBlockClassical(TransformerBlockBase):
     def __init__(self, d_model, num_heads, dff, dropout_rate=0.1):
         super(TransformerBlockClassical, self).__init__(d_model, num_heads, dff, dropout_rate)
         self.mha = MultiHeadAttentionClassical(d_model, num_heads)
-        self.ffn = point_wise_feed_forward_network(d_model, dff)
+        self.ffn = point_wise_feed_forward_network_classical(d_model, dff)
+
+
+class TransformerBlockQuantum(TransformerBlockBase):
+    def __init__(self, 
+                 d_model, num_heads, dff, dropout_rate=0.1,
+                 n_qubits_transformer: int = 0,
+                 n_qubits_ffn: int = 0,
+                 n_qlayers: int = 1,
+                 q_device='default.qubit'):
+        super(TransformerBlockQuantum, self).__init__(d_model, num_heads, dff, dropout_rate)
+        self.mha = MultiHeadAttentionQuantum(d_model, num_heads, n_qubits_transformer, q_device)
+        self.ffn = point_wise_feed_forward_network_quantum(d_model, dff, n_qubits_ffn, q_device)
 
 
 class EncoderLayerBase(tf.keras.layers.Layer):
@@ -190,6 +246,25 @@ class EncoderLayerClassical(EncoderLayerBase):
                         for _ in range(num_layers)]
 
 
+class EncoderLayerQuantum(EncoderLayerBase):
+    def __init__(self, 
+                num_layers, 
+                d_model, 
+                num_heads, 
+                dff, 
+                vocab_size,
+                maximum_position_encoding, 
+                dropout_rate=0.1,
+                n_qubits_transformer: int = 0,
+                n_qubits_ffn: int = 0,
+                n_qlayers: int = 1,
+                q_device="device.qubit"):
+        super(EncoderLayerQuantum, self).__init__(num_layers, d_model, num_heads, dff, vocab_size, maximum_position_encoding, dropout_rate)
+        self.enc_layers = [TransformerBlockQuantum(d_model, num_heads, dff, dropout_rate, 
+                                                   n_qubits_transformer, n_qubits_ffn, n_qlayers, q_device)
+                            for _ in range(num_layers)]
+
+
 class TextClassifierTF(tf.keras.Model):
     def __init__(self, 
                 num_layers, 
@@ -199,10 +274,20 @@ class TextClassifierTF(tf.keras.Model):
                 vocab_size, 
                 num_classes, 
                 maximum_position_encoding: int=10000, 
-                dropout_rate=0.1):
+                dropout_rate=0.1,
+                n_qubits_transformer: int = 0,
+                n_qubits_ffn: int = 0,
+                n_qlayers: int = 1,
+                q_device="device.qubit"):
         super(TextClassifierTF, self).__init__()
-        self.encoder = EncoderLayerClassical(num_layers, d_model, num_heads, dff, 
+
+        if n_qubits_transformer == 0 and n_qubits_ffn == 0:
+            self.encoder = EncoderLayerClassical(num_layers, d_model, num_heads, dff, 
                             vocab_size, maximum_position_encoding, dropout_rate)
+        else:
+            self.encoder = EncoderLayerQuantum(num_layers, d_model, num_heads, dff, 
+                            vocab_size, maximum_position_encoding, dropout_rate,
+                            n_qubits_transformer, n_qubits_ffn, n_qlayers, q_device)
         
         if num_classes < 2:
             raise RuntimeError("Number of classes must be at least 2")

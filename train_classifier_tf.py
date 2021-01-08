@@ -18,7 +18,7 @@ BUFFER_SIZE = 10000
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-D', '--q_device', default='local', type=str)
+    parser.add_argument('-D', '--q_device', default='default.qubit', type=str)
     parser.add_argument('-B', '--batch_size', default=32, type=int)
     parser.add_argument('-E', '--n_epochs', default=5, type=int)
     parser.add_argument('-C', '--n_classes', default=2, type=int)
@@ -43,7 +43,11 @@ if __name__ == '__main__':
         vocab_size=args.vocab_size,
         num_classes=args.n_classes,
         maximum_position_encoding=1024,
-        dropout_rate=args.dropout_rate)
+        dropout_rate=args.dropout_rate,
+        n_qubits_transformer=args.n_qubits_transformer,
+        n_qubits_ffn=args.n_qubits_ffn,
+        n_qlayers=args.n_qlayers,
+        q_device=args.q_device)
 
     assert args.n_classes >= 2
 
