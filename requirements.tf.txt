@@ -1,6 +1,6 @@
 wheel
 tqdm
 matplotlib
-tensorflow
+tensorflow==2.3.0
 tensorflow_datasets
 tensorflow-text
