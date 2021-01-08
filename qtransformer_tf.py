@@ -77,12 +77,13 @@ class MultiHeadAttentionBase(tf.keras.layers.Layer):
         x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
         return tf.transpose(x, perm=[0, 2, 1, 3])
     
+    def apply_dense_layers(self, v, k, q):
+        raise NotImplementedError("Base class does not implement apply_dense_layers() function")
+
     def call(self, v, k, q, mask):
         batch_size = tf.shape(q)[0]
 
-        q = self.wq(q)  # (batch_size, seq_len, d_model)
-        k = self.wk(k)  # (batch_size, seq_len, d_model)
-        v = self.wv(v)  # (batch_size, seq_len, d_model)
+        v, k, q = self.apply_dense_layers(v, k, q)
 
         q = self.split_heads(q, batch_size)  # (batch_size, num_heads, seq_len_q, depth)
         k = self.split_heads(k, batch_size)  # (batch_size, num_heads, seq_len_k, depth)
@@ -92,6 +93,7 @@ class MultiHeadAttentionBase(tf.keras.layers.Layer):
         scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])  # (batch_size, seq_len_q, num_heads, depth)
 
         concat_attention = tf.reshape(scaled_attention, (batch_size, -1, self.d_model))  # (batch_size, seq_len_q, d_model)
+
         output = self.dense(concat_attention)  # (batch_size, seq_len_q, d_model)
         return output, attention_weights
 
@@ -107,6 +109,12 @@ class MultiHeadAttentionClassical(MultiHeadAttentionBase):
         self.wk = tf.keras.layers.Dense(d_model)
         self.wv = tf.keras.layers.Dense(d_model)
         self.dense = tf.keras.layers.Dense(d_model)
+    
+    def apply_dense_layers(self, v, k, q):
+        q = self.wq(q)  # (batch_size, seq_len, d_model)
+        k = self.wk(k)  # (batch_size, seq_len, d_model)
+        v = self.wv(v)  # (batch_size, seq_len, d_model)
+        return v, k, q
 
 
 class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
@@ -137,6 +145,14 @@ class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
         self.wv = qml.qnn.KerasLayer(self.qlayer, weight_shapes, output_dim=n_qubits)
         self.dense = qml.qnn.KerasLayer(self.qlayer, weight_shapes, output_dim=n_qubits)
 
+    def apply_dense_layers(self, v, k, q):
+        batch_size, seq_len, _ = tf.shape(q)
+
+        q = [self.wq(q[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, d_model)
+        k = [self.wk(k[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, d_model)
+        v = [self.wv(v[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, d_model)
+
+        return v, k, q
 
 def point_wise_feed_forward_network_classical(d_model, dff):
   return tf.keras.Sequential([
