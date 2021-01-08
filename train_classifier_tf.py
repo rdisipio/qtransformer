@@ -72,4 +72,4 @@ if __name__ == '__main__':
                     batch_size=args.batch_size,
                     verbose=1)
     
-    model.save(model, 'model_tf')
+    model.save('model_tf')
