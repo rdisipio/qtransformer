@@ -4,10 +4,17 @@ import argparse
 import tqdm
 import time
 
+import numpy as np
+
 import tensorflow as tf
-import tensorflow_datasets as tfds
+from tensorflow.keras.datasets import imdb
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 from qtransformer_tf import TextClassifierTF
+
+
+BUFFER_SIZE = 10000
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -50,17 +57,15 @@ if __name__ == '__main__':
               metrics=['sparese_categorical_accuracy'])
     #print(model.summary())
 
-    train_data, validation_data, test_data = tfds.load(
-        name="imdb_reviews", 
-        split=('train[:60%]', 'train[60%:]', 'test'),
-        as_supervised=True)
+    (train_data, train_labels), (test_data, test_labels) = tf.keras.datasets.imdb.load_data(num_words=args.vocab_size)
+
+    train_data = pad_sequences(train_data, maxlen=args.max_seq_len, padding='pre', truncating='pre')
+    test_data = pad_sequences(test_data, maxlen=args.max_seq_len, padding='pre', truncating='pre')
     
-    history = model.fit(train_data.shuffle(10000).batch(512),
-                    epochs=10,
-                    validation_data=validation_data.batch(512),
+    history = model.fit(train_data, train_labels,
+                    epochs=args.n_epochs,
+                    validation_data=(test_data, test_labels),
+                    batch_size=args.batch_size,
                     verbose=1)
     
-    results = model.evaluate(test_data.batch(512), verbose=2)
-
-    for name, value in zip(model.metrics_names, results):
-        print("%s: %.3f" % (name, value))
+   

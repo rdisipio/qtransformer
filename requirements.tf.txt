@@ -1,5 +1,6 @@
 tensorflow
 tensorflow_datasets
+tensorflow-text
 pennylane
 matplotlib
 wheel
