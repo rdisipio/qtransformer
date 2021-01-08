@@ -129,6 +129,8 @@ class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
         assert n_qubits == d_model, f"Number of qubits ({n_qubits}) does not match embedding dim ({d_model})"
         if 'qulacs' in q_device:
             print(f"Quantum device: Qulacs: {q_device}")
+            if USE_GPU is True:
+                print("Qulacs will use the GPU")
             self.dev = qml.device(q_device, wires=n_qubits, gpu=USE_GPU)
         elif 'braket' in q_device:
             print(f"Quantum device: Amazon Braket: {q_device}")
