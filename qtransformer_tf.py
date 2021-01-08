@@ -135,7 +135,7 @@ class TransformerBlockBase(tf.keras.layers.Layer):
 class TransformerBlockClassical(TransformerBlockBase):
     def __init__(self, d_model, num_heads, dff, dropout_rate=0.1):
         super(TransformerBlockClassical, self).__init__(d_model, num_heads, dff, dropout_rate)
-        self.mha = MultiHeadAttention(d_model, num_heads)
+        self.mha = MultiHeadAttentionClassical(d_model, num_heads)
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
 
