@@ -7,7 +7,8 @@ import os
 # see also: https://www.tensorflow.org/tutorials/text/transformer
 
 
-USE_GPU = bool(os.environ.get('USE_GPU', False))
+#USE_GPU = bool(os.environ.get('USE_GPU', False))
+USE_GPU = True
 
 def get_angles(pos, i, d_model):
   angle_rates = 1 / np.power(10000, (2 * (i//2)) / np.float32(d_model))
