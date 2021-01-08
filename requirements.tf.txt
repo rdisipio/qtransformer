@@ -1,6 +1,6 @@
+wheel
+tqdm
+matplotlib
 tensorflow
 tensorflow_datasets
 tensorflow-text
-matplotlib
-wheel
-tqdm
