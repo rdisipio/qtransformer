@@ -10,15 +10,15 @@ import os
 USE_GPU = bool(os.environ.get('USE_GPU', False))
 #USE_GPU = True
 
-def get_angles(pos, i, d_model):
-  angle_rates = 1 / np.power(10000, (2 * (i//2)) / np.float32(d_model))
+def get_angles(pos, i, embed_dim):
+  angle_rates = 1 / np.power(10000, (2 * (i//2)) / np.float32(embed_dim))
   return pos * angle_rates
 
 
-def positional_encoding(position, d_model):
+def positional_encoding(position, embed_dim):
   angle_rads = get_angles(np.arange(position)[:, np.newaxis],
-                          np.arange(d_model)[np.newaxis, :],
-                          d_model)
+                          np.arange(embed_dim)[np.newaxis, :],
+                          embed_dim)
 
   # apply sin to even indices in the array; 2i
   angle_rads[:, 0::2] = np.sin(angle_rads[:, 0::2])
@@ -57,14 +57,14 @@ def scaled_dot_product_attention(q, k, v, mask):
 
 
 class MultiHeadAttentionBase(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads):
+    def __init__(self, embed_dim, num_heads):
         super(MultiHeadAttentionBase, self).__init__()
         self.num_heads = num_heads
-        self.d_model = d_model
+        self.embed_dim = embed_dim
 
-        assert d_model % self.num_heads == 0
+        assert embed_dim % self.num_heads == 0
 
-        self.depth = d_model // self.num_heads
+        self.depth = embed_dim // self.num_heads
 
         self.wq = None
         self.wk = None
@@ -96,37 +96,37 @@ class MultiHeadAttentionBase(tf.keras.layers.Layer):
         scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask)
         scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])  # (batch_size, seq_len_q, num_heads, depth)
 
-        concat_attention = tf.reshape(scaled_attention, (batch_size, -1, self.d_model))  # (batch_size, seq_len_q, d_model)
+        concat_attention = tf.reshape(scaled_attention, (batch_size, -1, self.embed_dim))  # (batch_size, seq_len_q, embed_dim)
 
-        output = self.apply_combine_heads(concat_attention) # (batch_size, seq_len_q, d_model)
+        output = self.apply_combine_heads(concat_attention) # (batch_size, seq_len_q, embed_dim)
         return output, attention_weights
 
 
 class MultiHeadAttentionClassical(MultiHeadAttentionBase):
-    def __init__(self, d_model, num_heads):
-        super(MultiHeadAttentionClassical, self).__init__(d_model, num_heads)
-        self.wq = tf.keras.layers.Dense(d_model)
-        self.wk = tf.keras.layers.Dense(d_model)
-        self.wv = tf.keras.layers.Dense(d_model)
-        self.dense = tf.keras.layers.Dense(d_model)
+    def __init__(self, embed_dim, num_heads):
+        super(MultiHeadAttentionClassical, self).__init__(embed_dim, num_heads)
+        self.wq = tf.keras.layers.Dense(embed_dim)
+        self.wk = tf.keras.layers.Dense(embed_dim)
+        self.wv = tf.keras.layers.Dense(embed_dim)
+        self.dense = tf.keras.layers.Dense(embed_dim)
     
     def apply_dense_layers(self, v, k, q):
-        q = self.wq(q)  # (batch_size, seq_len, d_model)
-        k = self.wk(k)  # (batch_size, seq_len, d_model)
-        v = self.wv(v)  # (batch_size, seq_len, d_model)
+        q = self.wq(q)  # (batch_size, seq_len, embed_dim)
+        k = self.wk(k)  # (batch_size, seq_len, embed_dim)
+        v = self.wv(v)  # (batch_size, seq_len, embed_dim)
         return v, k, q
     
     def apply_combine_heads(self, x):
-        return self.dense(x)  # (batch_size, seq_len_q, d_model)
+        return self.dense(x)  # (batch_size, seq_len_q, embed_dim)
 
 
 class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
     def __init__(self, 
-                 d_model, num_heads, 
+                 embed_dim, num_heads, 
                  n_qubits, n_qlayers=1, q_device='default.qubit'):
-        super(MultiHeadAttentionQuantum, self).__init__(d_model, num_heads)
+        super(MultiHeadAttentionQuantum, self).__init__(embed_dim, num_heads)
         # todo: add intermediate layer to "dress" quantum circuit
-        assert n_qubits == d_model, f"Number of qubits ({n_qubits}) does not match embedding dim ({d_model})"
+        assert n_qubits == embed_dim, f"Number of qubits ({n_qubits}) does not match embedding dim ({embed_dim})"
         if 'qulacs' in q_device:
             print(f"Quantum device: Qulacs: {q_device}")
             if USE_GPU is True:
@@ -155,9 +155,9 @@ class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
     def apply_dense_layers(self, v, k, q):
         batch_size, seq_len, _ = tf.shape(q)
 
-        q = [self.wq(q[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, d_model)
-        k = [self.wk(k[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, d_model)
-        v = [self.wv(v[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, d_model)
+        q = [self.wq(q[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, embed_dim)
+        k = [self.wk(k[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, embed_dim)
+        v = [self.wv(v[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, embed_dim)
 
         return tf.convert_to_tensor(v), tf.convert_to_tensor(k), tf.convert_to_tensor(q)
     
@@ -167,22 +167,22 @@ class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
         return tf.transpose(combined_output, perm=[1,0,2])
 
 
-def point_wise_feed_forward_network_classical(d_model, dff):
+def point_wise_feed_forward_network_classical(embed_dim, dff):
   return tf.keras.Sequential([
       tf.keras.layers.Dense(dff, activation='relu'),  # (batch_size, seq_len, dff)
-      tf.keras.layers.Dense(d_model)  # (batch_size, seq_len, d_model)
+      tf.keras.layers.Dense(embed_dim)  # (batch_size, seq_len, embed_dim)
   ])
 
 
-def point_wise_feed_forward_network_quantum(d_model, dff, n_qubits_ffn, n_qlayers=1, q_device='default.qubit'):
+def point_wise_feed_forward_network_quantum(embed_dim, dff, n_qubits_ffn, n_qlayers=1, q_device='default.qubit'):
     return tf.keras.Sequential([
       tf.keras.layers.Dense(dff, activation='relu'),  # (batch_size, seq_len, dff)
-      tf.keras.layers.Dense(d_model)  # (batch_size, seq_len, d_model)
+      tf.keras.layers.Dense(embed_dim)  # (batch_size, seq_len, embed_dim)
   ])
 
 
 class TransformerBlockBase(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, dff, dropout_rate=0.1):
+    def __init__(self, embed_dim, num_heads, dff, dropout_rate=0.1):
         super(TransformerBlockBase, self).__init__()
         self.mha = None
         self.ffn = None
@@ -194,40 +194,40 @@ class TransformerBlockBase(tf.keras.layers.Layer):
         self.dropout2 = tf.keras.layers.Dropout(dropout_rate)
 
     def call(self, x, training, mask):
-        attn_output, _ = self.mha(x, x, x, mask)  # (batch_size, input_seq_len, d_model)
+        attn_output, _ = self.mha(x, x, x, mask)  # (batch_size, input_seq_len, embed_dim)
         attn_output = self.dropout1(attn_output, training=training)
-        out1 = self.layernorm1(x + attn_output)  # (batch_size, input_seq_len, d_model)
+        out1 = self.layernorm1(x + attn_output)  # (batch_size, input_seq_len, embed_dim)
 
-        ffn_output = self.ffn(out1)  # (batch_size, input_seq_len, d_model)
+        ffn_output = self.ffn(out1)  # (batch_size, input_seq_len, embed_dim)
         ffn_output = self.dropout2(ffn_output, training=training)
-        out2 = self.layernorm2(out1 + ffn_output)  # (batch_size, input_seq_len, d_model)
+        out2 = self.layernorm2(out1 + ffn_output)  # (batch_size, input_seq_len, embed_dim)
 
         return out2
 
 
 class TransformerBlockClassical(TransformerBlockBase):
-    def __init__(self, d_model, num_heads, dff, dropout_rate=0.1):
-        super(TransformerBlockClassical, self).__init__(d_model, num_heads, dff, dropout_rate)
-        self.mha = MultiHeadAttentionClassical(d_model, num_heads)
-        self.ffn = point_wise_feed_forward_network_classical(d_model, dff)
+    def __init__(self, embed_dim, num_heads, dff, dropout_rate=0.1):
+        super(TransformerBlockClassical, self).__init__(embed_dim, num_heads, dff, dropout_rate)
+        self.mha = MultiHeadAttentionClassical(embed_dim, num_heads)
+        self.ffn = point_wise_feed_forward_network_classical(embed_dim, dff)
 
 
 class TransformerBlockQuantum(TransformerBlockBase):
     def __init__(self, 
-                 d_model, num_heads, dff, dropout_rate=0.1,
+                 embed_dim, num_heads, dff, dropout_rate=0.1,
                  n_qubits_transformer: int = 0,
                  n_qubits_ffn: int = 0,
                  n_qlayers: int = 1,
                  q_device='default.qubit'):
-        super(TransformerBlockQuantum, self).__init__(d_model, num_heads, dff, dropout_rate)
-        self.mha = MultiHeadAttentionQuantum(d_model, num_heads, n_qubits_transformer, n_qlayers, q_device)
-        self.ffn = point_wise_feed_forward_network_quantum(d_model, dff, n_qubits_ffn, n_qlayers, q_device)
+        super(TransformerBlockQuantum, self).__init__(embed_dim, num_heads, dff, dropout_rate)
+        self.mha = MultiHeadAttentionQuantum(embed_dim, num_heads, n_qubits_transformer, n_qlayers, q_device)
+        self.ffn = point_wise_feed_forward_network_quantum(embed_dim, dff, n_qubits_ffn, n_qlayers, q_device)
 
 
 class EncoderLayerBase(tf.keras.layers.Layer):
     def __init__(self, 
                 num_layers, 
-                d_model, 
+                embed_dim, 
                 num_heads, 
                 dff, 
                 vocab_size,
@@ -235,11 +235,11 @@ class EncoderLayerBase(tf.keras.layers.Layer):
                 dropout_rate=0.1):
         super(EncoderLayerBase, self).__init__()
 
-        self.d_model = d_model
+        self.embed_dim = embed_dim
         self.num_layers = num_layers
 
-        self.embedding = tf.keras.layers.Embedding(vocab_size, d_model)
-        self.pos_encoding = positional_encoding(maximum_position_encoding, self.d_model)
+        self.embedding = tf.keras.layers.Embedding(vocab_size, embed_dim)
+        self.pos_encoding = positional_encoding(maximum_position_encoding, self.embed_dim)
         self.enc_layers = None
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
 
@@ -248,8 +248,8 @@ class EncoderLayerBase(tf.keras.layers.Layer):
         seq_len = tf.shape(x)[1]
 
         # adding embedding and position encoding.
-        x = self.embedding(x)  # (batch_size, input_seq_len, d_model)
-        x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+        x = self.embedding(x)  # (batch_size, input_seq_len, embed_dim)
+        x *= tf.math.sqrt(tf.cast(self.embed_dim, tf.float32))
         x += self.pos_encoding[:, :seq_len, :]
 
         x = self.dropout(x, training=training)
@@ -257,28 +257,28 @@ class EncoderLayerBase(tf.keras.layers.Layer):
         for i in range(self.num_layers):
             x = self.enc_layers[i](x, training, mask)
 
-        return x  # (batch_size, input_seq_len, d_model)
+        return x  # (batch_size, input_seq_len, embed_dim)
 
 
 class EncoderLayerClassical(EncoderLayerBase):
     def __init__(self, 
                 num_layers, 
-                d_model, 
+                embed_dim, 
                 num_heads, 
                 dff, 
                 vocab_size,
                 maximum_position_encoding, 
                 dropout_rate=0.1):
-        super(EncoderLayerClassical, self).__init__(num_layers, d_model, num_heads, dff, vocab_size, maximum_position_encoding, dropout_rate)
+        super(EncoderLayerClassical, self).__init__(num_layers, embed_dim, num_heads, dff, vocab_size, maximum_position_encoding, dropout_rate)
         
-        self.enc_layers = [TransformerBlockClassical(d_model, num_heads, dff, dropout_rate) 
+        self.enc_layers = [TransformerBlockClassical(embed_dim, num_heads, dff, dropout_rate) 
                         for _ in range(num_layers)]
 
 
 class EncoderLayerQuantum(EncoderLayerBase):
     def __init__(self, 
                 num_layers, 
-                d_model, 
+                embed_dim, 
                 num_heads, 
                 dff, 
                 vocab_size,
@@ -288,8 +288,8 @@ class EncoderLayerQuantum(EncoderLayerBase):
                 n_qubits_ffn: int = 0,
                 n_qlayers: int = 1,
                 q_device="device.qubit"):
-        super(EncoderLayerQuantum, self).__init__(num_layers, d_model, num_heads, dff, vocab_size, maximum_position_encoding, dropout_rate)
-        self.enc_layers = [TransformerBlockQuantum(d_model, num_heads, dff, dropout_rate, 
+        super(EncoderLayerQuantum, self).__init__(num_layers, embed_dim, num_heads, dff, vocab_size, maximum_position_encoding, dropout_rate)
+        self.enc_layers = [TransformerBlockQuantum(embed_dim, num_heads, dff, dropout_rate, 
                                                    n_qubits_transformer, n_qubits_ffn, n_qlayers, q_device)
                             for _ in range(num_layers)]
 
@@ -297,7 +297,7 @@ class EncoderLayerQuantum(EncoderLayerBase):
 class TextClassifierTF(tf.keras.Model):
     def __init__(self, 
                 num_layers, 
-                d_model, 
+                embed_dim, 
                 num_heads, 
                 dff, 
                 vocab_size, 
@@ -311,10 +311,10 @@ class TextClassifierTF(tf.keras.Model):
         super(TextClassifierTF, self).__init__()
 
         if n_qubits_transformer == 0 and n_qubits_ffn == 0:
-            self.encoder = EncoderLayerClassical(num_layers, d_model, num_heads, dff, 
+            self.encoder = EncoderLayerClassical(num_layers, embed_dim, num_heads, dff, 
                             vocab_size, maximum_position_encoding, dropout_rate)
         else:
-            self.encoder = EncoderLayerQuantum(num_layers, d_model, num_heads, dff, 
+            self.encoder = EncoderLayerQuantum(num_layers, embed_dim, num_heads, dff, 
                             vocab_size, maximum_position_encoding, dropout_rate,
                             n_qubits_transformer, n_qubits_ffn, n_qlayers, q_device)
         
@@ -326,7 +326,7 @@ class TextClassifierTF(tf.keras.Model):
             self.final_layer = tf.keras.layers.Dense(num_classes, activation=tf.keras.activations.softmax)
     
     def call(self, x, training):
-        encoded_output = self.encoder(x, training)  # (batch_size, inp_seq_len, d_model)
+        encoded_output = self.encoder(x, training)  # (batch_size, inp_seq_len, embed_dim)
         pooled_output = encoded_output[:,0,:]
         final_output = self.final_layer(pooled_output)  # (batch_size, tar_seq_len, num_classes)
 
