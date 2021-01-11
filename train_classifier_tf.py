@@ -37,7 +37,7 @@ if __name__ == '__main__':
 
     model = TextClassifierTF(
         num_layers=args.n_transformer_blocks,
-        d_model=args.embed_dim,
+        embed_dim=args.embed_dim,
         num_heads=args.n_heads,
         dff=args.ffn_dim,
         vocab_size=args.vocab_size,
