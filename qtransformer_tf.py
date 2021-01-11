@@ -155,16 +155,26 @@ class MultiHeadAttentionQuantum(MultiHeadAttentionBase):
     def apply_dense_layers(self, v, k, q):
         batch_size, seq_len, _ = tf.shape(q)
 
-        q = [self.wq(q[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, embed_dim)
-        k = [self.wk(k[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, embed_dim)
-        v = [self.wv(v[:, t, :]) for t in range(seq_len)]  # (batch_size, seq_len, embed_dim)
+        q = [self.wq(q[:, t, :]) for t in range(seq_len)]  # (seq_len, batch_size, embed_dim)
+        k = [self.wk(k[:, t, :]) for t in range(seq_len)]  # (seq_len, batch_size, embed_dim)
+        v = [self.wv(v[:, t, :]) for t in range(seq_len)]  # (seq_len, batch_size, embed_dim)
 
-        return tf.convert_to_tensor(v), tf.convert_to_tensor(k), tf.convert_to_tensor(q)
+        q = tf.convert_to_tensor(q)
+        k = tf.convert_to_tensor(k)
+        v = tf.convert_to_tensor(v)
+
+        q = tf.transpose(q, perm=[1, 0, 2])  # (batch_size, seq_len, embed_dim)
+        k = tf.transpose(k, perm=[1, 0, 2])  # (batch_size, seq_len, embed_dim)
+        v = tf.transpose(v, perm=[1, 0, 2])  # (batch_size, seq_len, embed_dim)
+
+        return v, k, q
     
     def apply_combine_heads(self, x):
         _, seq_len, _ = tf.shape(x)
-        combined_output = tf.convert_to_tensor([self.dense(x[:, t, :]) for t in range(seq_len)])
-        return tf.transpose(combined_output, perm=[1,0,2])
+        x = [self.dense(x[:, t, :]) for t in range(seq_len)]  # (seq_len, batch_size, embed_dim)
+        x = tf.convert_to_tensor(x)
+        x = tf.transpose(x, perm=[1,0,2])
+        return x
 
 
 def point_wise_feed_forward_network_classical(embed_dim, dff):
